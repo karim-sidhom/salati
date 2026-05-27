@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Application Prière Pro — LORD System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;700;900&display=swap');
+        
+        body {
+            font-family: 'Cairo', sans-serif;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            /* Arrière-plan : Grande Mosquée de Kairouan */
+            background: linear-gradient(rgba(2, 43, 32, 0.7), rgba(2, 43, 32, 0.7)), 
+                        url('https://images.unsplash.com/photo-1590075865003-e48277afd55d?auto=format&fit=crop&q=80&w=2000') no-repeat center center fixed;
+            background-size: cover;
+            color: white;
+            padding: 20px 0;
+        }
+
+        /* Thématique Verre Émeraude Islamique */
+        .glass-islamic {
+            background: rgba(6, 40, 31, 0.85);
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+        }
+
+        .prayer-card.active {
+            border: 2px solid #f59e0b;
+            background: rgba(245, 158, 11, 0.2);
+            transform: scale(1.05);
+        }
+
+        .qibla-needle {
+            transition: transform 1s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* Animation d'allumage et d'extinction progressive (Glow Pulse Or) */
+        @keyframes glowPulseOr {
+            0%, 100% { 
+                opacity: 0.3; 
+                text-shadow: 0 0 0px rgba(245, 158, 11, 0);
+            }
+            50% { 
+                opacity: 1; 
+                text-shadow: 0 0 25px rgba(245, 158, 11, 0.9), 0 0 10px rgba(245, 158, 11, 0.5);
+            }
+        }
+        
+        .waqf-glow {
+            animation: glowPulseOr 2.5s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="glass-islamic max-w-6xl w-full mx-4 rounded-[2.5rem] p-6 md:p-10 relative">
+        
+        <div class="waqf-glow text-center mb-6">
+            <h2 class="text-2xl md:text-3xl font-black text-amber-400 tracking-wide">
+                وقف خيري لروح جدي العزيز حمودة سيدهم
+            </h2>
+        </div>
+
+        <div class="flex flex-col md:flex-row justify-between items-center mb-8 border-b border-emerald-500/20 pb-6">
+            <div class="text-center md:text-right">
+                <h1 class="text-3xl font-black text-emerald-500 mb-1">مواقيت الصلاة</h1>
+                <p id="hijri-date" class="text-md text-emerald-300/70 font-light">جاري تحميل التقويم الهجري...</p>
+            </div>
+            <div class="mt-4 md:mt-0 text-center md:text-left">
+                <div class="bg-emerald-950/60 px-4 py-2 rounded-full border border-emerald-500/30">
+                    <span id="location-text" class="text-amber-400 font-bold tracking-widest text-sm uppercase">Nabeul, Tunisia</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <div class="lg:col-span-2 space-y-6">
+                <div class="bg-gradient-to-br from-emerald-900/40 to-transparent p-6 rounded-3xl border border-emerald-500/20 text-center">
+                    <p id="next-prayer-label" class="text-xs uppercase tracking-[0.3em] text-emerald-300 mb-2">المتبقي للصلاة القادمة</p>
+                    <div id="countdown" class="text-5xl md:text-7xl font-black tracking-tighter text-amber-400 drop-shadow-2xl">--:--:--</div>
+                </div>
+
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+                    <div id="card-Fajr" class="prayer-card p-4 rounded-2xl bg-emerald-950/40 border border-emerald-500/10 text-center transition-all">
+                        <span class="block text-xs text-emerald-300/70 mb-2">الفجر</span>
+                        <span id="time-Fajr" class="text-xl font-bold text-white">--:--</span>
+                    </div>
+                    <div id="card-Dhuhr" class="prayer-card p-4 rounded-2xl bg-emerald-950/40 border border-emerald-500/10 text-center transition-all">
+                        <span class="block text-xs text-emerald-300/70 mb-2">الظهر</span>
+                        <span id="time-Dhuhr" class="text-xl font-bold text-white">--:--</span>
+                    </div>
+                    <div id="card-Asr" class="prayer-card p-4 rounded-2xl bg-emerald-950/40 border border-emerald-500/10 text-center transition-all">
+                        <span class="block text-xs text-emerald-300/70 mb-2">العصر</span>
+                        <span id="time-Asr" class="text-xl font-bold text-white">--:--</span>
+                    </div>
+                    <div id="card-Maghrib" class="prayer-card p-4 rounded-2xl bg-emerald-950/40 border border-emerald-500/10 text-center transition-all">
+                        <span class="block text-xs text-emerald-300/70 mb-2">المغرب</span>
+                        <span id="time-Maghrib" class="text-xl font-bold text-white">--:--</span>
+                    </div>
+                    <div id="card-Isha" class="prayer-card p-4 rounded-2xl bg-emerald-950/40 border border-emerald-500/10 text-center transition-all">
+                        <span class="block text-xs text-emerald-300/70 mb-2">العشاء</span>
+                        <span id="time-Isha" class="text-xl font-bold text-white">--:--</span>
+                    </div>
+                </div>
+
+                <div class="bg-emerald-950/50 rounded-3xl p-6 border border-emerald-500/20 space-y-4">
+                    <h3 class="text-lg font-bold text-amber-400 flex items-center gap-2">
+                        <span>🕌</span> المساجد في محيط 2 كم (نابل)
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                        <div class="p-3 rounded-xl bg-emerald-900/30 border border-emerald-500/20 flex justify-between items-center">
+                            <div>
+                                <span class="font-bold block text-white">الجامع الكبير بنابل</span>
+                            </div>
+                            <a href="https://maps.google.com/?cid=1052856262317284701&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQ" target="_blank" class="text-xs bg-amber-500 text-emerald-950 px-2.5 py-1.5 rounded-lg font-bold shadow-md hover:bg-amber-400 transition-colors">خرائط Google</a>
+                        </div>
+                        <div class="p-3 rounded-xl bg-emerald-900/30 border border-emerald-500/10 flex justify-between items-center">
+                            <div>
+                                <span class="font-bold block text-white">جامع سيدي عاشور</span>
+                            </div>
+                            <a href="https://maps.google.com/?cid=13430124266974937730&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQ" target="_blank" class="text-xs bg-emerald-800 text-white px-2.5 py-1.5 rounded-lg font-medium border border-emerald-600 hover:bg-emerald-700 transition-colors">خرائط Google</a>
+                        </div>
+                        <div class="p-3 rounded-xl bg-emerald-900/30 border border-emerald-500/10 flex justify-between items-center">
+                            <div>
+                                <span class="font-bold block text-white">جامع التقوى</span>
+                            </div>
+                            <a href="https://maps.google.com/?cid=13013910063677682175&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQ" target="_blank" class="text-xs bg-emerald-800 text-white px-2.5 py-1.5 rounded-lg font-medium border border-emerald-600 hover:bg-emerald-700 transition-colors">خرائط Google</a>
+                        </div>
+                        <div class="p-3 rounded-xl bg-emerald-900/30 border border-emerald-500/10 flex justify-between items-center">
+                            <div>
+                                <span class="font-bold block text-white">جامع أبو بكر الصديق</span>
+                            </div>
+                            <a href="https://maps.google.com/?cid=7003002104694818435&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQ" target="_blank" class="text-xs bg-emerald-800 text-white px-2.5 py-1.5 rounded-lg font-medium border border-emerald-600 hover:bg-emerald-700 transition-colors">خرائط Google</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-emerald-950/40 rounded-3xl p-6 border border-emerald-500/10 flex flex-col items-center justify-between min-h-[320px]">
+                <div class="text-center">
+                    <h3 class="text-lg font-bold text-white mb-1">اتجاه القبلة</h3>
+                    <p class="text-xs text-emerald-400">Orientation de la Qibla</p>
+                </div>
+
+                <div class="relative w-40 h-40 flex items-center justify-center my-4">
+                    <div class="absolute inset-0 rounded-full border-4 border-emerald-500/20"></div>
+                    <div id="qibla-dir" class="qibla-needle w-1.5 h-28 bg-gradient-to-t from-amber-500 to-white rounded-full relative" style="transform: rotate(113deg);">
+                        <div class="absolute top-0 left-1/2 -translate-x-1/2 w-3 h-3 bg-amber-400 rotate-45 rounded-sm"></div>
+                    </div>
+                    <div class="absolute w-4 h-4 bg-amber-500 rounded-full shadow-lg"></div>
+                </div>
+
+                <div class="text-center w-full space-y-3">
+                    <div class="text-md font-mono text-amber-400 font-bold">113.8° E-S</div>
+                    <button onclick="updateGPS()" class="w-full py-2 bg-emerald-900/60 hover:bg-emerald-800 border border-emerald-500/30 rounded-xl text-xs font-bold tracking-wider transition-all">
+                        تحديث الموقع عبر الـ GPS
+                    </button>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="mt-8 text-center opacity-30 text-[10px] tracking-[0.5em] font-light">
+            SYSTEM MANAGER : LORD | AL-WASFA AL-MAF KOUDA
+        </div>
+    </div>
+
+    <script>
+        let prayerTimes = {};
+
+        async function fetchTimes(lat = 36.4561, lon = 10.7376) {
+            try {
+                const res = await fetch(`https://api.aladhan.com/v1/timings?latitude=${lat}&longitude=${lon}&method=3`);
+                const data = await res.json();
+                const t = data.data.timings;
+                
+                prayerTimes = { Fajr: t.Fajr, Dhuhr: t.Dhuhr, Asr: t.Asr, Maghrib: t.Maghrib, Isha: t.Isha };
+
+                for (let p in prayerTimes) {
+                    document.getElementById(`time-${p}`).innerText = prayerTimes[p];
+                }
+
+                const hijri = data.data.date.hijri;
+                document.getElementById('hijri-date').innerText = `${hijri.day} ${hijri.month.ar} ${hijri.year} هـ`;
+                
+                refreshCountdown();
+            } catch (e) { console.error("Erreur API."); }
+        }
+
+        function refreshCountdown() {
+            if (!prayerTimes.Fajr) return;
+
+            const now = new Date();
+            const timeNow = (now.getHours() * 3600) + (now.getMinutes() * 60) + now.getSeconds();
+
+            const order = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
+            let next = null;
+
+            for (let p of order) {
+                const [h, m] = prayerTimes[p].split(':').map(Number);
+                const pSecs = (h * 3600) + (m * 60);
+
+                if (pSecs > timeNow) {
+                    next = { name: p, secs: pSecs };
+                    break;
+                }
+            }
+
+            if (!next) { 
+                const [h, m] = prayerTimes['Fajr'].split(':').map(Number);
+                next = { name: 'Fajr', secs: (h * 3600) + (m * 60) + 86400 };
+            }
+
+            let diff = next.secs - timeNow;
+            const h = Math.floor(diff / 3600);
+            diff %= 3600;
+            const min = Math.floor(diff / 60);
+            const sec = diff % 60;
+
+            document.getElementById('countdown').innerText = 
+                `${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+            
+            order.forEach(p => document.getElementById(`card-${p}`).classList.remove('active'));
+            document.getElementById(`card-${next.name}`).classList.add('active');
+        }
+
+        // Modification uniquement ici pour automatiser
+        if (navigator.geolocation) {
+            navigator.geolocation.watchPosition(p => {
+                document.getElementById('location-text').innerText = "تم التحديث تلقائياً";
+                fetchTimes(p.coords.latitude, p.coords.longitude);
+            }, () => fetchTimes());
+        }
+
+        setInterval(refreshCountdown, 1000);
+        fetchTimes(); 
+    </script>
+</body>
+</html>
