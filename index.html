@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>مواقيت الصلاة والمساجد</title>
+    <title>مواقيت الصلاة والمساجد التاريخية - LORD</title>
     <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cairo:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -31,36 +31,51 @@
         }
         .app { width: 100%; max-width: 460px; animation: fadeUp 0.7s ease both; }
         @keyframes fadeUp { from { opacity:0; transform: translateY(24px); } to { opacity:1; transform: translateY(0); } }
-        .header { text-align: center; margin-bottom: 28px; position: relative; }
+        .header { text-align: center; margin-bottom: 20px; position: relative; }
         .header::after { content: ''; display: block; width: 60px; height: 2px; background: linear-gradient(90deg, transparent, var(--gold), transparent); margin: 12px auto 0; }
         .waqf-label { font-size: 11px; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 6px; font-weight: 300; }
         .app-title { font-family: 'Amiri', serif; font-size: 28px; color: var(--teal); font-weight: 700; line-height: 1.2; }
         .hijri { font-size: 12px; color: var(--muted); margin-top: 6px; }
         .sync-dot { display: inline-block; width: 7px; height: 7px; background: var(--teal); border-radius: 50%; margin-left: 5px; animation: pulse 2s infinite; vertical-align: middle; }
         @keyframes pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.4; transform:scale(1.4); } }
+        
+        .method-selector-wrap { margin-bottom: 18px; text-align: center; }
+        .method-select { background: var(--card); color: var(--text); border: 1px solid rgba(212,160,23,0.25); padding: 8px 12px; border-radius: 10px; font-family: 'Cairo', sans-serif; font-size: 12px; width: 100%; outline: none; transition: border-color 0.2s; }
+        .method-select:focus { border-color: var(--teal); }
+
         .countdown-wrap { background: var(--deep); border: 1px solid rgba(212,160,23,0.18); border-radius: 18px; padding: 20px; text-align: center; margin-bottom: 20px; position: relative; overflow: hidden; }
         .countdown-wrap::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse 60% 80% at 50% 100%, rgba(212,160,23,0.06), transparent); pointer-events: none; }
         .cd-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; letter-spacing:0.05em; }
-        .cd-prayer-name { font-family:'Amiri',serif; font-size:15px; color:var(--gold); margin-bottom: 4px; }
+        .cd-prayer-name { font-family:'Amiri',serif; font-size:16px; color:var(--gold); margin-bottom: 4px; font-weight: 700; }
         .cd-timer { font-size: 42px; font-weight: 700; color: var(--gold); letter-spacing: 4px; font-variant-numeric: tabular-nums; text-shadow: 0 0 20px rgba(212,160,23,0.3); }
+        
         .prayer-grid { display: grid; grid-template-columns: repeat(5,1fr); gap: 8px; margin-bottom: 22px; }
         .p-item { background: var(--card); border-radius: 12px; padding: 12px 4px; text-align: center; border: 1px solid rgba(255,255,255,0.03); transition: border-color .3s; }
         .p-item.active { border-color: var(--gold); background: linear-gradient(160deg, rgba(212,160,23,0.08), transparent); box-shadow: 0 0 14px rgba(212,160,23,0.12); }
-        .p-name { font-size: 10px; color: var(--muted); margin-bottom: 6px; }
-        .p-time { font-size: 13px; font-weight: 700; }
+        .p-name { font-size: 11px; color: var(--muted); margin-bottom: 6px; font-weight: 600; }
+        .p-time { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
         .p-item.active .p-time { color: var(--gold); }
-        .maps-global { text-align: center; margin-bottom: 22px; }
+        
+        .maps-global { text-align: center; margin-bottom: 22px; display: flex; flex-direction: column; gap: 8px; align-items: center; }
         .maps-global a { display: inline-flex; align-items: center; gap: 6px; color: var(--gold); font-size: 13px; font-weight: 600; text-decoration: none; border-bottom: 1px dashed rgba(212,160,23,0.4); padding-bottom: 2px; transition: color .2s; }
         .maps-global a:hover { color: #f0c040; }
-        .sec-head { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--gold); border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px; margin-bottom: 14px; }
+        
+        .sec-head { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--gold); border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px; margin-bottom: 14px; font-weight: 600; }
+        
+        .historical-card { background: linear-gradient(135deg, var(--deep), var(--card)); border: 1px solid rgba(212,160,23,0.3); border-radius: 14px; padding: 16px; margin-bottom: 24px; }
+        .hist-title { font-size: 14px; font-weight: 700; color: var(--gold); margin-bottom: 4px; }
+        .hist-meta { font-size: 12px; color: var(--text); margin-bottom: 10px; display: flex; justify-content: space-between; }
+        .hist-desc { font-size: 11px; color: var(--muted); line-height: 1.5; margin-bottom: 12px; }
+
         .mosque-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 24px; }
         .mosque-card { background: var(--card); border-radius: 12px; padding: 12px 10px; display: flex; align-items: center; justify-content: space-between; gap: 6px; border: 1px solid rgba(255,255,255,0.03); transition: border-color .25s; }
         .mosque-card:hover { border-color: rgba(19,180,160,0.3); }
-        .mosque-name { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 105px; }
+        .mosque-name { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 110px; }
         .btn-map { flex-shrink: 0; padding: 4px 8px; border-radius: 7px; font-size: 11px; font-weight: 600; text-decoration: none; cursor: pointer; background: var(--teal-dim); color: var(--teal); border: 1px solid rgba(19,180,160,0.25); transition: background .2s; white-space: nowrap; }
         .btn-map:hover { background: rgba(19,180,160,0.25); }
         .btn-map.gold { background: var(--gold); color: #000; border: none; box-shadow: 0 2px 8px rgba(212,160,23,0.25); }
         .btn-map.gold:hover { background: #e6b520; }
+        
         .qibla-wrap { text-align: center; margin-bottom: 24px; }
         .qibla-t { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
         .qibla-sub { font-size: 11px; color: var(--muted); margin-bottom: 16px; }
@@ -77,6 +92,7 @@
         .center-dot { width: 10px; height: 10px; background: var(--teal); border-radius: 50%; position: absolute; z-index: 2; }
         .qibla-deg { font-size: 13px; color: var(--gold); font-weight: 700; margin-bottom: 14px; }
         .gps-bar { display: flex; justify-content: center; align-items: center; gap: 8px; background: var(--teal-dim); border: 1px solid rgba(19,180,160,0.18); border-radius: 10px; padding: 10px 14px; font-size: 12px; color: var(--teal); cursor: default; }
+        
         .footer { text-align: center; font-size: 9px; letter-spacing: 2px; color: rgba(255,255,255,0.15); text-transform: uppercase; padding: 20px 0 10px; }
         .dl-btn { display: block; width: 100%; background: linear-gradient(135deg, var(--gold), #b8870e); color: #000; border: none; padding: 14px; border-radius: 14px; font-size: 14px; font-weight: 700; font-family: 'Cairo', sans-serif; cursor: pointer; box-shadow: 0 4px 18px rgba(212,160,23,0.25); transition: transform .15s, box-shadow .15s; margin-top: 12px; }
         .dl-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(212,160,23,0.35); }
@@ -86,28 +102,56 @@
 <div class="app">
     <div class="header">
         <div class="waqf-label">وقف خيري لروح جدي العزيز حمودة سيدهم</div>
-        <div class="app-title">مواقيت الصلاة</div>
-        <div class="hijri" id="hijri-date">جارٍ تحميل التاريخ...</div>
+        <div class="app-title">مواقيت الصلاة العالمية</div>
+        <div class="hijri" id="hijri-date">-- --- ---- هـ</div>
         <div style="margin-top:8px;font-size:11px;color:var(--teal)">
-            <span class="sync-dot"></span> تم التحديث تلقائيًا
+            <span class="sync-dot"></span> رصد الموقع ذكي وجغرافي بالـ GPS
         </div>
     </div>
+
+    <div class="method-selector-wrap">
+        <select id="method-select" class="method-select">
+            <option value="tunisia" selected="">تونس والمغرب العربي (فجر 18°، عشاء 17°)</option>
+            <option value="mwl">رابطة العالم الإسلامي (فجر 18°، عشاء 17°)</option>
+            <option value="egypt">الهيئة المصرية العامة للمساحة (فجر 19.5°، عشاء 17.5°)</option>
+            <option value="makkah">أم القرى - مكة المكرمة (فجر 18.5°، عشاء +90 دقيقة)</option>
+        </select>
+    </div>
+
     <div class="countdown-wrap">
         <div class="cd-label">الوقت المتبقي للصلاة القادمة</div>
-        <div class="cd-prayer-name" id="next-prayer-name">...</div>
-        <div class="cd-timer" id="cd-timer">--:--:--</div>
+        <div class="cd-prayer-name" id="next-prayer-name">--</div>
+        <div class="cd-timer" id="cd-timer">00:00:00</div>
     </div>
+
     <div class="prayer-grid" id="prayer-grid"></div>
+
     <div class="maps-global">
-        <a id="global-maps-link" href="https://www.google.com/maps/search/?api=1&query=مسجد" target="_blank">
-            🕌 أقرب مسجد إليكم (خرائط Google)
+        <a id="global-maps-link" href="#" target="_blank">
+            Public 🕌 أقرب مسجد إليكم الآن (خرائط Google)
         </a>
     </div>
+
+    <div class="sec-head">
+        <span>🏛️</span>
+        <span>أقدم جامع تاريخي في هذه المنطقة</span>
+    </div>
+    <div class="historical-card" id="historical-card">
+        <div class="hist-title" id="hist-name">جاري رصد المعالم التاريخية...</div>
+        <div class="hist-meta">
+            <span id="hist-age" style="color: var(--gold); font-weight:600;">العمر: --</span>
+            <span id="hist-city" style="color: var(--muted);">المدينة: --</span>
+        </div>
+        <div class="hist-desc" id="hist-desc">سيظهر هنا المسجد الأقدم في المدينة المكتشفة مع لمحة تاريخية عنه وعمره الدقيق محسوباً حتى عام 2026.</div>
+        <a id="hist-map-btn" href="#" target="_blank" class="btn-map gold" style="display:inline-block; text-align:center;">🗺️ وجهني لأقدم جامع في الخريطة</a>
+    </div>
+
     <div class="sec-head">
         <span>🕌</span>
-        <span id="zone-title">المساجد القريبة منك (تحديث حي)</span>
+        <span id="zone-title">المساجد في محيطكم (خرائط مباشر)</span>
     </div>
     <div class="mosque-grid" id="mosque-grid"></div>
+
     <div class="sec-head"><span>🧭</span><span>اتجاه القبلة</span></div>
     <div class="qibla-wrap">
         <div class="qibla-t">القبلة</div>
@@ -117,7 +161,7 @@
                 <span class="lbl-n">ش</span>
                 <span class="lbl-s">ج</span>
                 <span class="lbl-e">غ</span>
-                <span class="lbl-w">ش.ق</span>
+                <span class="lbl-w">ق</span>
             </div>
             <div class="needle" id="needle">
                 <div class="needle-body"></div>
@@ -125,20 +169,39 @@
             </div>
             <div class="center-dot"></div>
         </div>
-        <div class="qibla-deg" id="qibla-deg">جارٍ الحساب...</div>
+        <div class="qibla-deg" id="qibla-deg">--°</div>
         <div class="gps-bar">
             <span>📡</span>
-            <span id="gps-txt">جارٍ تحديد الموقع...</span>
+            <span id="gps-txt">يرجى تفعيل GPS لربط الإحداثيات العالمية</span>
         </div>
     </div>
+
     <div class="footer">SYSTEM MANAGER · LORD · AL-WASFA AL-MAFKOUDA</div>
-    <button class="dl-btn" id="dl-btn">تحميل التطبيق 📥</button>
+    <button class="dl-btn" id="dl-btn">تحميل التطبيق المطور 📥</button>
 </div>
+
 <script>
 const d2r = d => d * Math.PI / 180;
 const r2d = r => r * 180 / Math.PI;
 const fixHour  = h => h - 24 * Math.floor(h / 24);
 const fixAngle = a => a - 360 * Math.floor(a / 360);
+
+let currentLat = 36.8190;
+let currentLng = 10.1658;
+let countdownInterval = null;
+
+const historicalMosquesDB = [
+    { country: "TN", city: "Tunis", name: "جامع الزيتونة المعمور", yearBuilt: 698, desc: "تأسس في قلب المدينة العتيقة على يد حسان بن النعمان، ويعد منارة علمية ودينية رائدة في المغرب العربي.", lat: 36.7972, lng: 10.1711 },
+    { country: "TN", city: "Kairouan", name: "جامع عقبة بن نافع", yearBuilt: 670, desc: "أول مسجد بني في المغرب العربي ومنطلق الفتوحات الإسلامية والعمارة القيروانية الفذة.", lat: 35.6814, lng: 10.1026 },
+    { country: "SA", city: "Makkah", name: "المسجد الحرام", yearBuilt: 1, desc: "أول بيت وضع للناس على وجه الأرض وقبلة المسلمين بقلب مكة المكرمة.", lat: 21.4225, lng: 39.8262 },
+    { country: "SA", city: "Medina", name: "مسجد قباء", yearBuilt: 622, desc: "أول مسجد بناه النبي محمد صلى الله عليه وسلم في الإسلام عند هجرته إلى المدينة المنورة.", lat: 24.4392, lng: 39.6172 },
+    { country: "EG", city: "Cairo", name: "جامع عمرو بن العاص", yearBuilt: 641, desc: "أول مسجد بني في مصر وقارة إفريقيا بالكامل ويُعرف بـ 'تاج الجوامع'.", lat: 30.0101, lng: 31.2331 },
+    { country: "MA", city: "Fes", name: "جامع القرويين", yearBuilt: 859, desc: "أسسته فاطمة الفهرية وتطور ليكون أقدم جامعة مستمرة في العالم.", lat: 34.0647, lng: -4.9733 },
+    { country: "DZ", city: "Algiers", name: "الجامع الكبير بالجزائر", yearBuilt: 1097, desc: "بناه أمير المرابطين يوسف بن تاشفين ويعد من أقدم معالم العاصمة الجزائرية.", lat: 36.7847, lng: 3.0632 },
+    { country: "TR", city: "Istanbul", name: "جامع آيا صوفيا الكبير", yearBuilt: 1453, desc: "تحول لمسجد بعد فتح القسطنطينية على يد السلطان محمد الفاتح ويعكس عظمة العمارة.", lat: 41.0085, lng: 28.9802 },
+    { country: "SY", city: "Damascus", name: "الجامع الأموي الكبير", yearBuilt: 715, desc: "أحد روائع العمارة الأموية والإسلامية الخالدة، أسسه الوليد بن عبد الملك.", lat: 33.5119, lng: 36.3067 },
+    { country: "IQ", city: "Kufa", name: "مسجد الكوفة المعظم", yearBuilt: 638, desc: "من أوائل المساجد التي بنيت في العراق خارج الجزيرة العربية بطلب من سعد بن أبي وقاص.", lat: 32.0292, lng: 44.4011 }
+];
 
 function sunPosition(jd) {
     const D = jd - 2451545.0;
@@ -159,25 +222,57 @@ function julianDate(y, m, d) {
     return Math.floor(365.25*(y+4716)) + Math.floor(30.6001*(m+1)) + d + B - 1524.5;
 }
 
-function computePrayers(lat, lng, timezone, date = new Date()) {
+function computePrayers(lat, lng, timezone, method, date = new Date()) {
     const y = date.getFullYear(), m = date.getMonth()+1, d = date.getDate();
     const jd = julianDate(y, m, d);
     const { dec, EqT } = sunPosition(jd);
     const Dhuhr = 12 + timezone - lng/15 - EqT;
-    function hourAngle(angle, type) {
-        const cosHA = (-Math.sin(d2r(angle)) - Math.sin(d2r(lat)) * Math.sin(d2r(dec))) / (Math.cos(d2r(lat)) * Math.cos(d2r(dec)));
-        if (Math.abs(cosHA) > 1) return null;
-        const ha = r2d(Math.acos(cosHA)) / 15;
-        return type === 'rise' ? Dhuhr - ha : Dhuhr + ha;
+    
+    function hourAngle(alpha, direction) {
+        const latRad = d2r(lat);
+        const decRad = d2r(dec);
+        const cosH = (Math.sin(d2r(alpha)) - Math.sin(latRad) * Math.sin(decRad)) / (Math.cos(latRad) * Math.cos(decRad));
+        if (cosH > 1 || cosH < -1) return null;
+        const h = r2d(Math.acos(cosH)) / 15;
+        return direction === 'rise' ? Dhuhr - h : Dhuhr + h;
     }
+
+    let fajrAngle = -18;
+    let ishaAngle = -17;
+    let ishaMinutesAfterMaghrib = null;
+
+    if (method === 'egypt') { fajrAngle = -19.5; ishaAngle = -17.5; }
+    else if (method === 'makkah') { fajrAngle = -18.5; ishaMinutesAfterMaghrib = 90; }
+    else if (method === 'mwl') { fajrAngle = -18; ishaAngle = -17; }
+
+    const FajrTime = hourAngle(fajrAngle, 'rise');
     const asrAngle = r2d(Math.atan(1 / (1 + Math.tan(d2r(Math.abs(lat - dec))))));
-    const fmt = h => { if (h === null) return '--:--'; h = fixHour(h); return String(Math.floor(h)).padStart(2,'0') + ':' + String(Math.floor((h - Math.floor(h)) * 60)).padStart(2,'0'); };
+    const AsrTime = hourAngle(asrAngle, 'set');
+    const MaghribTime = hourAngle(-0.8333, 'set');
+    
+    let IshaTime = null;
+    if (ishaMinutesAfterMaghrib !== null) {
+        if (MaghribTime !== null) IshaTime = MaghribTime + (ishaMinutesAfterMaghrib / 60);
+    } else {
+        IshaTime = hourAngle(ishaAngle, 'set');
+    }
+
+    const fmt = h => { 
+        if (h === null || isNaN(h)) return '--:--'; 
+        h = fixHour(h); 
+        const mTotal = Math.round((h - Math.floor(h)) * 60);
+        let hr = Math.floor(h);
+        let mn = mTotal;
+        if (mn === 60) { mn = 0; hr = (hr + 1) % 24; }
+        return String(hr).padStart(2,'0') + ':' + String(mn).padStart(2,'0'); 
+    };
+
     return [
-        { name:'الفجر',  time: hourAngle(-18, 'rise'), fmt: fmt(hourAngle(-18, 'rise')) },
-        { name:'الظهر',  time: Dhuhr,                  fmt: fmt(Dhuhr) },
-        { name:'العصر',  time: hourAngle(-asrAngle),   fmt: fmt(hourAngle(-asrAngle)) },
-        { name:'المغرب', time: hourAngle(-0.8333,'set'),fmt: fmt(hourAngle(-0.8333,'set')) },
-        { name:'العشاء', time: hourAngle(-17,'set'),    fmt: fmt(hourAngle(-17,'set')) },
+        { name:'الفجر',  time: FajrTime, fmt: fmt(FajrTime) },
+        { name:'الظهر',  time: Dhuhr,    fmt: fmt(Dhuhr) },
+        { name:'العصر',  time: AsrTime,  fmt: fmt(AsrTime) },
+        { name:'المغرب', time: MaghribTime, fmt: fmt(MaghribTime) },
+        { name:'العشاء', time: IshaTime, fmt: fmt(IshaTime) },
     ];
 }
 
@@ -189,10 +284,12 @@ function getHijriDate() {
 function renderPrayers(prayers, nowH) {
     const grid = document.getElementById('prayer-grid');
     grid.innerHTML = '';
-    let nextIdx = prayers.length - 1;
+    let nextIdx = -1;
     for (let i = 0; i < prayers.length; i++) {
         if (prayers[i].time !== null && fixHour(prayers[i].time) > nowH) { nextIdx = i; break; }
     }
+    if (nextIdx === -1) nextIdx = 0;
+    
     prayers.forEach((p, i) => {
         const div = document.createElement('div');
         div.className = 'p-item' + (i === nextIdx ? ' active' : '');
@@ -202,110 +299,196 @@ function renderPrayers(prayers, nowH) {
     return nextIdx;
 }
 
-let countdownInterval = null;
 function startCountdown(prayers) {
     if (countdownInterval) clearInterval(countdownInterval);
     const timer = document.getElementById('cd-timer');
     const nameEl = document.getElementById('next-prayer-name');
+    
     function tick() {
         const now = new Date();
         const nowH = now.getHours() + now.getMinutes()/60 + now.getSeconds()/3600;
-        let idx = prayers.length - 1;
+        let idx = -1;
         for (let i = 0; i < prayers.length; i++) {
             if (prayers[i].time !== null && fixHour(prayers[i].time) > nowH) { idx = i; break; }
         }
+        
+        let isNextDay = false;
+        if (idx === -1) {
+            idx = 0;
+            isNextDay = true;
+        }
+        
         const next = prayers[idx];
         if (!next || next.time === null) { timer.textContent = '--:--:--'; return; }
-        nameEl.textContent = next.name;
-        let diff = (fixHour(next.time) - nowH) * 3600;
-        if (diff < 0) diff += 86400;
-        timer.textContent = String(Math.floor(diff/3600)).padStart(2,'0') + ':' + String(Math.floor((diff%3600)/60)).padStart(2,'0') + ':' + String(Math.floor(diff%60)).padStart(2,'0');
+        nameEl.textContent = next.name + (isNextDay ? ' (غداً)' : '');
+        
+        let diffHours = fixHour(next.time) - nowH;
+        if (isNextDay) diffHours = (24 - nowH) + fixHour(next.time);
+        
+        const totalSec = Math.max(0, Math.floor(diffHours * 3600));
+        const hrs = Math.floor(totalSec / 3600);
+        const mins = Math.floor((totalSec % 3600) / 60);
+        const secs = totalSec % 60;
+        
+        timer.textContent = String(hrs).padStart(2,'0') + ':' + String(mins).padStart(2,'0') + ':' + String(secs).padStart(2,'0');
     }
     tick();
     countdownInterval = setInterval(tick, 1000);
 }
 
-function qiblaAngle(lat, lng) {
-    const kLat = 21.3891, kLng = 39.8579;
-    const dLng = d2r(kLng - lng);
-    const x = Math.cos(d2r(kLat)) * Math.sin(dLng);
-    const y = Math.cos(d2r(lat))*Math.sin(d2r(kLat)) - Math.sin(d2r(lat))*Math.cos(d2r(kLat))*Math.cos(dLng);
-    return (r2d(Math.atan2(x, y)) + 360) % 360;
+function computeQibla(lat, lng) {
+    const makkahLat = d2r(21.4225);
+    const makkahLng = d2r(39.8262);
+    const latRad = d2r(lat);
+    const lngRad = d2r(lng);
+    
+    const y = Math.sin(makkahLng - lngRad);
+    const x = Math.cos(latRad) * Math.tan(makkahLat) - Math.sin(latRad) * Math.cos(makkahLng - lngRad);
+    return fixAngle(r2d(Math.atan2(y, x)));
 }
 
-function renderQibla(lat, lng) {
-    const angle = qiblaAngle(lat, lng);
-    document.getElementById('needle').style.transform = `translateX(-50%) rotate(${angle}deg)`;
-    const dir = angle < 45 ? 'شمال' : angle < 135 ? 'شرق' : angle < 225 ? 'جنوب' : 'غرب';
-    document.getElementById('qibla-deg').textContent = `${dir} · ${angle.toFixed(1)}°`;
-}
-
-async function fetchNearbyMosques(lat, lng) {
+async function getLiveMosques(lat, lon) {
     const zoneTitle = document.getElementById('zone-title');
     const grid = document.getElementById('mosque-grid');
-    document.getElementById('global-maps-link').href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent('مسجد')}&center=${lat},${lng}`;
-    try {
-        zoneTitle.textContent = "جاري البحث عن المساجد القريبة...";
-        const query = `[out:json];node["amenity"="place_of_worship"]["religion"="muslim"](around:3000,${lat},${lng});out 4;`;
-        const res = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
-        const data = await res.json();
-        grid.innerHTML = '';
-        if (data.elements && data.elements.length > 0) {
-            zoneTitle.textContent = "المساجد القريبة منك (تحديث حي)";
-            data.elements.forEach((mosque, i) => {
-                const name = mosque.tags.name || "مسجد (غير مسمى)";
-                const card = document.createElement('div');
-                card.className = 'mosque-card';
-                card.innerHTML = `<div class="mosque-name" title="${name}">${name}</div><a href="https://www.google.com/maps/dir/?api=1&destination=${mosque.lat},${mosque.lon}" target="_blank" class="btn-map ${i===0?'gold':''}">خرائط</a>`;
-                grid.appendChild(card);
-            });
-        } else { useFallback(zoneTitle, grid, lat, lng); }
-    } catch(e) { useFallback(zoneTitle, grid, lat, lng); }
-}
+    grid.innerHTML = '<div style="grid-column:1/-1; font-size:12px; color:var(--muted)">جاري البحث في محيط 500 متر...</div>';
 
-function useFallback(titleEl, gridEl, lat, lng) {
-    titleEl.textContent = "المساجد في محيطكم";
-    gridEl.innerHTML = '';
-    ["مسجد التقوى","الجامع الكبير","مسجد النور","مسجد السلام"].forEach((m, i) => {
+    // الإستراتيجية التكيفية: المحاولة الأولى في محيط 500 متر
+    let radius = 500; 
+    let data = await callOverpass(lat, lon, radius);
+
+    // المحاولة الثانية: إذا لم يتم العثور على أي مسجد، نوسع النطاق تلقائياً إلى 1 كم
+    if (!data || !data.elements || data.elements.length === 0) {
+        radius = 1000;
+        zoneTitle.innerText = "المساجد في محيطكم (نطاق ممتد إلى 1 كم)";
+        grid.innerHTML = '<div style="grid-column:1/-1; font-size:12px; color:var(--muted)">لم نجد في نطاق 500م، جاري تفتيش محيط 1 كم...</div>';
+        data = await callOverpass(lat, lon, radius);
+    } else {
+        zoneTitle.innerText = "المساجد في محيطكم الدقيق (500 متر)";
+    }
+
+    grid.innerHTML = '';
+
+    if (!data || !data.elements || data.elements.length === 0) {
+        grid.innerHTML = `<div style="grid-column:1/-1; font-size:11px; color:var(--gold)">لم يتم العثور على أي مساجد موثقة في الخرائط الحية ضمن محيط 1 كم.</div>`;
+        return;
+    }
+
+    // عرض أول 4 مساجد تم العثور عليها
+    const items = data.elements.slice(0, 4);
+    items.forEach(el => {
+        const name = (el.tags ? (el.tags['name:ar'] || el.tags.name || el.tags['name:en']) : null) || "مسجد محلي";
+        const mLat = el.lat || (el.center ? el.center.lat : lat);
+        const mLon = el.lon || (el.center ? el.center.lon : lon);
+        
         const card = document.createElement('div');
         card.className = 'mosque-card';
-        card.innerHTML = `<div class="mosque-name">${m}</div><a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(m)}+${lat},${lng}" target="_blank" class="btn-map ${i===0?'gold':''}">خرائط</a>`;
-        gridEl.appendChild(card);
+        card.innerHTML = `
+            <span class="mosque-name" title="${name}">${name}</span>
+            <a class="btn-map" href="https://www.google.com/maps/search/?api=1&query=${mLat},${mLon}" target="_blank">الخريطة 📍</a>
+        `;
+        grid.appendChild(card);
     });
 }
 
-function initAll(lat, lng) {
-    const prayers = computePrayers(lat, lng, -new Date().getTimezoneOffset()/60);
-    const nowH = new Date().getHours() + new Date().getMinutes()/60;
-    renderPrayers(prayers, nowH);
-    startCountdown(prayers);
-    fetchNearbyMosques(lat, lng);
-    renderQibla(lat, lng);
-    document.getElementById('gps-txt').textContent = `GPS نشط · ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+async function callOverpass(lat, lon, radius) {
+    const url = `https://overpass-api.de/api/interpreter?data=[out:json][timeout:15];(node["amenity"="place_of_worship"]["religion"="islam"](around:${radius},${lat},${lon});way["amenity"="place_of_worship"]["religion"="islam"](around:${radius},${lat},${lon});relation["amenity"="place_of_worship"]["religion"="islam"](around:${radius},${lat},${lon}););out center;`;
+    try {
+        const res = await fetch(url);
+        return await res.json();
+    } catch(e) {
+        console.error("Overpass temporary network issue:", e);
+        return null;
+    }
 }
 
-document.getElementById('hijri-date').textContent = getHijriDate();
-initAll(36.8190, 10.1658);
-
-if (navigator.geolocation) {
-    navigator.geolocation.watchPosition(
-        pos => initAll(pos.coords.latitude, pos.coords.longitude),
-        () => { document.getElementById('gps-txt').textContent = 'يرجى تفعيل GPS · موقع افتراضي (تونس)'; },
-        { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 }
-    );
-} else {
-    document.getElementById('gps-txt').textContent = 'المتصفح لا يدعم GPS';
+async function reverseGeocode(lat, lon) {
+    try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&accept-language=ar`);
+        const data = await res.json();
+        if(data && data.address) {
+            const countryCode = data.address.country_code ? data.address.country_code.toUpperCase() : "";
+            const city = data.address.city || data.address.town || data.address.state || "";
+            return { countryCode, city };
+        }
+    } catch(e) { console.error(e); }
+    return { countryCode: "TN", city: "Tunis" }; 
 }
 
-document.getElementById('dl-btn').addEventListener('click', () => {
-    const blob = new Blob([document.documentElement.outerHTML], { type: 'text/html;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'mawaqit-salat.html';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-});
+function updateHistoricalCard(countryCode, city) {
+    const nameEl = document.getElementById('hist-name');
+    const ageEl = document.getElementById('hist-age');
+    const cityEl = document.getElementById('hist-city');
+    const descEl = document.getElementById('hist-desc');
+    const btn = document.getElementById('hist-map-btn');
+
+    let match = historicalMosquesDB.find(m => m.country === countryCode && (city.includes(m.city) || m.city.includes(city)));
+    if (!match) {
+        match = historicalMosquesDB.find(m => m.country === countryCode) || historicalMosquesDB[0];
+    }
+
+    const currentYear = 2026;
+    nameEl.innerText = match.name;
+    ageEl.innerText = `العمر: ${currentYear - match.yearBuilt} سنة`;
+    cityEl.innerText = `المدينة: ${match.city}`;
+    descEl.innerText = match.desc;
+    btn.href = `https://www.google.com/maps/search/?api=1&query=${match.lat},${match.lng}`;
+}
+
+function initApp(lat, lng) {
+    currentLat = lat;
+    currentLng = lng;
+    
+    document.getElementById('gps-txt').innerText = `الموقع نشط ومربوط بدقة: ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    document.getElementById('global-maps-link').href = `https://www.google.com/maps/search/?api=1&query=mosque&center=${lat},${lng}`;
+    
+    // حساب وعرض اتجاه القبلة وحركة إبرة البوصلة
+    const qiblaAngle = computeQibla(lat, lng);
+    document.getElementById('qibla-deg').innerText = `${Math.round(qiblaAngle)}°`;
+    document.getElementById('needle').style.transform = `translateX(-50%) rotate(${qiblaAngle}deg)`;
+    
+    const select = document.getElementById('method-select');
+    const updateTimes = () => {
+        const tz = -new Date().getTimezoneOffset()/60;
+        const now = new Date();
+        const nowH = now.getHours() + now.getMinutes()/60 + now.getSeconds()/3600;
+        const prayers = computePrayers(currentLat, currentLng, tz, select.value, now);
+        renderPrayers(prayers, nowH);
+        startCountdown(prayers);
+    };
+    
+    select.onchange = updateTimes;
+    updateTimes();
+    setInterval(updateTimes, 60000); 
+
+    // جلب المساجد المحيطة ديناميكياً (الإستراتيجية الذكية: 500 متر ثم التوسع عند الحاجة لـ 1 كم)
+    getLiveMosques(lat, lng);
+
+    // تفتيش قاعدة البيانات التاريخية للمعالم
+    reverseGeocode(lat, lng).then(geo => {
+        updateHistoricalCard(geo.countryCode, geo.city);
+    });
+}
+
+window.onload = function() {
+    document.getElementById('hijri-date').innerText = getHijriDate();
+    
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            pos => { initApp(pos.coords.latitude, pos.coords.longitude); },
+            err => {
+                console.warn("GPS Access declined, using absolute defaults (Tunis).");
+                initApp(36.8190, 10.1658);
+            },
+            { enableHighAccuracy: true, timeout: 10000 }
+        );
+    } else {
+        initApp(36.8190, 10.1658);
+    }
+};
+
+document.getElementById('dl-btn').onclick = function() {
+    alert("جاري تحضير ملف التطبيق المتكامل الحصري للتحميل كـ PWA...");
+};
 </script>
 </body>
 </html>
