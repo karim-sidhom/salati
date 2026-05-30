@@ -4,6 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>مواقيت الصلاة والمساجد التاريخية - LORD</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b1e1a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="مواقيت">
+    <link rel="apple-touch-icon" href="icon.svg">
     <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cairo:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css" rel="stylesheet">
     <style>
@@ -109,8 +115,6 @@
         .gps-bar { display: flex; justify-content: center; align-items: center; gap: 8px; background: var(--teal-dim); border: 1px solid rgba(19,180,160,0.18); border-radius: 10px; padding: 10px 14px; font-size: 12px; color: var(--teal); cursor: default; }
         
         .footer { text-align: center; font-size: 9px; letter-spacing: 2px; color: rgba(255,255,255,0.15); text-transform: uppercase; padding: 20px 0 10px; }
-        .dl-btn { display: block; width: 100%; background: linear-gradient(135deg, var(--gold), #b8870e); color: #000; border: none; padding: 14px; border-radius: 14px; font-size: 14px; font-weight: 700; font-family: 'Cairo', sans-serif; cursor: pointer; box-shadow: 0 4px 18px rgba(212,160,23,0.25); transition: transform .15s, box-shadow .15s; margin-top: 12px; }
-        .dl-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(212,160,23,0.35); }
         /* Simulation panel */
         #sim-panel { display:none; background:rgba(30,60,20,0.7); border:1px solid rgba(19,180,160,0.35); border-radius:12px; padding:14px 16px; margin-bottom:16px; }
         .sim-header { font-size:12px; font-weight:700; color:var(--teal); margin-bottom:10px; display:flex; align-items:center; gap:6px; }
@@ -229,7 +233,6 @@
     </div>
 
     <div class="footer">SYSTEM MANAGER · LORD · AL-WASFA AL-MAFKOUDA</div>
-    <button class="dl-btn" id="dl-btn">تحميل التطبيق المطور 📥</button>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
@@ -715,8 +718,25 @@ window.onload = function() {
         }
 
         if (!navigator.geolocation) {
-            initApp(36.8190, 10.1658);
+            document.getElementById('gps-txt').textContent = '⚠️ المتصفح لا يدعم تحديد الموقع — يرجى استخدام متصفح حديث';
+            document.getElementById('gps-txt').style.color = '#e06060';
+            mosqueState('⚠️ المتصفح لا يدعم تحديد الموقع');
             return;
+        }
+
+        document.getElementById('gps-txt').textContent = '📡 جاري تحديد موقعك...';
+        document.getElementById('gps-txt').style.color = '';
+
+        function showGpsError(err) {
+            const msgs = {
+                1: '⚠️ لم يتم منح إذن الموقع — يرجى السماح للمتصفح بالوصول إلى موقعك',
+                2: '⚠️ تعذّر تحديد الموقع — قد يكون GPS متوقفاً أو الإشارة ضعيفة',
+                3: '⚠️ انتهت مهلة GPS — يرجى التأكد من تفعيل GPS والمحاولة مجدداً',
+            };
+            const msg = (err && msgs[err.code]) || '⚠️ فشل تحديد الموقع';
+            document.getElementById('gps-txt').textContent = msg;
+            document.getElementById('gps-txt').style.color = '#e06060';
+            mosqueState(msg);
         }
 
         let initialized = false;
@@ -732,19 +752,18 @@ window.onload = function() {
             gpsWatchId = navigator.geolocation.watchPosition(pos => {
                 latestGpsPos = pos;
                 if (!initialized) { initialized = true; initApp(pos.coords.latitude, pos.coords.longitude); }
-            }, () => {
-                if (!initialized) { initialized = true; initApp(36.8190, 10.1658); }
+            }, err => {
+                if (!initialized) { initialized = true; showGpsError(err); }
                 if (gpsTrackInterval) { clearInterval(gpsTrackInterval); gpsTrackInterval = null; }
             }, { enableHighAccuracy: false, timeout: 10000 });
-            if (!initialized) { initialized = true; initApp(36.8190, 10.1658); }
+            // no default-location fallback here — wait for low-accuracy watch to resolve
         }, { enableHighAccuracy: true, timeout: 8000 });
 
         gpsTrackInterval = setInterval(() => {
             if (document.getElementById('pos-mode-select').value !== 'auto') return;
             const ts = new Date().toLocaleTimeString('ar-TN');
             if (!latestGpsPos) {
-                console.warn(`[GPS ${ts}] لا يوجد موقع متاح`);
-                showGpsNotif('⚠️ تعذّر تحديد الموقع', false);
+                console.warn(`[GPS ${ts}] لا يوجد موقع بعد — في انتظار إشارة GPS`);
                 return;
             }
             const newLat = latestGpsPos.coords.latitude;
@@ -794,9 +813,11 @@ window.onload = function() {
     startGPS();
 };
 
-document.getElementById('dl-btn').onclick = function() {
-    alert("جاري تحضير ملف التطبيق المتكامل الحصري للتحميل كـ PWA...");
-};
+
+// Service Worker
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
 </script>
 </body>
 </html>
