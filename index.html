@@ -111,6 +111,20 @@
         .footer { text-align: center; font-size: 9px; letter-spacing: 2px; color: rgba(255,255,255,0.15); text-transform: uppercase; padding: 20px 0 10px; }
         .dl-btn { display: block; width: 100%; background: linear-gradient(135deg, var(--gold), #b8870e); color: #000; border: none; padding: 14px; border-radius: 14px; font-size: 14px; font-weight: 700; font-family: 'Cairo', sans-serif; cursor: pointer; box-shadow: 0 4px 18px rgba(212,160,23,0.25); transition: transform .15s, box-shadow .15s; margin-top: 12px; }
         .dl-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(212,160,23,0.35); }
+        /* Simulation panel */
+        #sim-panel { display:none; background:rgba(30,60,20,0.7); border:1px solid rgba(19,180,160,0.35); border-radius:12px; padding:14px 16px; margin-bottom:16px; }
+        .sim-header { font-size:12px; font-weight:700; color:var(--teal); margin-bottom:10px; display:flex; align-items:center; gap:6px; }
+        .sim-badge { background:rgba(19,180,160,0.15); border:1px solid rgba(19,180,160,0.4); border-radius:6px; padding:2px 8px; font-size:10px; letter-spacing:.04em; }
+        .sim-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; font-size:12px; }
+        .sim-label { color:var(--muted); }
+        .sim-value { color:var(--text); font-weight:600; text-align:left; direction:ltr; }
+        #sim-location-name { color:var(--teal); font-weight:700; font-size:13px; text-align:center; margin-bottom:10px; min-height:18px; }
+        .sim-skip-row { display:flex; gap:8px; align-items:center; margin-top:10px; padding-top:10px; border-top:1px solid rgba(19,180,160,0.15); }
+        .sim-skip-input { background:var(--card); color:var(--text); border:1px solid rgba(19,180,160,0.3); border-radius:8px; padding:6px 10px; font-family:'Cairo',sans-serif; font-size:13px; font-weight:700; width:70px; text-align:center; outline:none; }
+        .sim-skip-input:focus { border-color:var(--teal); }
+        .sim-skip-label { color:var(--muted); font-size:12px; flex:1; }
+        .sim-skip-btn { background:rgba(19,180,160,0.18); color:var(--teal); border:1px solid rgba(19,180,160,0.4); border-radius:8px; padding:6px 14px; font-family:'Cairo',sans-serif; font-size:12px; font-weight:700; cursor:pointer; transition:background .2s; white-space:nowrap; }
+        .sim-skip-btn:hover { background:rgba(19,180,160,0.32); }
     </style>
 </head>
 <body>
@@ -143,6 +157,17 @@
         <button id="apply-pos-btn" class="apply-pos-btn">تطبيق الموقع ✓</button>
         <div id="pos-error" class="pos-error" style="display:none;"></div>
         <div id="manual-location-info" class="manual-location-info" style="display:none;"></div>
+    </div>
+    <div id="sim-panel">
+        <div class="sim-header">🚗 محاكاة <span class="sim-badge">SIMULATION</span></div>
+        <div id="sim-location-name">جاري التحديد...</div>
+        <div class="sim-row"><span class="sim-label">الإحداثيات</span><span class="sim-value" id="sim-coords">-- , --</span></div>
+        <div class="sim-row"><span class="sim-label">المتبقي للوصول</span><span class="sim-value" id="sim-remaining">-- كم</span></div>
+        <div class="sim-skip-row">
+            <input type="number" id="sim-skip-km" class="sim-skip-input" value="3" min="0.1" max="80" step="0.5">
+            <span class="sim-skip-label">كم — تخطي</span>
+            <button id="sim-skip-btn" class="sim-skip-btn">⏩ تخطي</button>
+        </div>
     </div>
 
     <div class="countdown-wrap">
@@ -220,6 +245,55 @@ let countdownInterval = null;
 let gpsTrackInterval = null;
 let gpsWatchId = null;
 let latestGpsPos = null;
+let updateTimesInterval = null;
+
+const SIM_MODE = new URLSearchParams(window.location.search).get('simulation_test') === 'true';
+if (SIM_MODE) console.warn('[SIM] وضع المحاكاة مفعّل: تونس → نابل · طريق A1 · 50 كم/س');
+
+// Simulation route: Tunis → Nabeul via A1 highway
+const SIM_ROUTE = [
+    [36.8190, 10.1658],  // تونس العاصمة
+    [36.7302, 10.2280],  // بن عروس
+    [36.7252, 10.3386],  // حمام الأنف
+    [36.6984, 10.4858],  // سليمان
+    [36.6046, 10.5051],  // قرمبالية
+    [36.5307, 10.5873],  // بني خلاد
+    [36.4959, 10.6205],  // منزل بوزلفة
+    [36.4050, 10.6206],  // الحمامات
+    [36.4510, 10.7370],  // نابل (الوجهة)
+];
+const SIM_SPEED_KMH = 50;
+const SIM_DEST = SIM_ROUTE[SIM_ROUTE.length - 1];
+let simSegIdx = 0;
+let simSegDist = 0; // km traveled into the current segment
+
+function simAdvance(kmStep) {
+    simSegDist += kmStep;
+    while (simSegIdx < SIM_ROUTE.length - 1) {
+        const [lat1, lon1] = SIM_ROUTE[simSegIdx];
+        const [lat2, lon2] = SIM_ROUTE[simSegIdx + 1];
+        const segLen = haversineKm(lat1, lon1, lat2, lon2);
+        if (simSegDist <= segLen) break;
+        simSegDist -= segLen;
+        simSegIdx++;
+    }
+    if (simSegIdx >= SIM_ROUTE.length - 1) return { lat: SIM_DEST[0], lng: SIM_DEST[1], done: true };
+    const [lat1, lon1] = SIM_ROUTE[simSegIdx];
+    const [lat2, lon2] = SIM_ROUTE[simSegIdx + 1];
+    const t = simSegDist / haversineKm(lat1, lon1, lat2, lon2);
+    return { lat: lat1 + (lat2 - lat1) * t, lng: lon1 + (lon2 - lon1) * t, done: false };
+}
+
+function updateSimPanel(lat, lng) {
+    const remKm = haversineKm(lat, lng, SIM_DEST[0], SIM_DEST[1]);
+    document.getElementById('sim-coords').textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    document.getElementById('sim-remaining').textContent = `${remKm.toFixed(2)} كم`;
+    document.getElementById('sim-location-name').textContent = '...';
+    reverseGeocode(lat, lng).then(({ city, state }) => {
+        const label = [city, state].filter(Boolean).join(' · ');
+        document.getElementById('sim-location-name').textContent = label || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    });
+}
 
 function showGpsNotif(text, changed) {
     Toastify({
@@ -468,10 +542,24 @@ async function findNearbyMosques(lat, lon) {
         return;
     }
 
+    const NON_MOSQUE = [
+        // Arabic
+        'كنيسة','كنائس','كاتدرائية','كنيس','كنس','معبد','هيكل','دير','كابيلا','بيعة','كنيست','قديس','قديسة',
+        // English
+        'church','cathedral','chapel','synagogue','temple','monastery','convent','basilica','abbey','parish','shrine',
+        // French
+        'église','eglise','cathédrale','cathedrale','chapelle','monastère','monastere','couvent','basilique','paroisse','prieuré','prieure','abbaye',
+    ];
+
     const all = places.map(p => {
         const mLat = parseFloat(p.lat), mLon = parseFloat(p.lon);
         const name = p.name || (p.display_name && p.display_name.split(',')[0].trim()) || 'مسجد';
         return { name, lat: mLat, lon: mLon, dist: haversineKm(lat, lon, mLat, mLon) };
+    }).filter(m => {
+        const n = m.name.toLowerCase();
+        const hit = NON_MOSQUE.find(kw => n.includes(kw));
+        if (hit) { console.log(`[FILTER] تم تجاهل "${m.name}" — الكلمة: "${hit}"`); return false; }
+        return true;
     }).sort((a, b) => a.dist - b.dist);
 
     let items = [], radiusKm = 50;
@@ -547,7 +635,8 @@ function initApp(lat, lng) {
     
     select.onchange = updateTimes;
     updateTimes();
-    setInterval(updateTimes, 60000); 
+    if (updateTimesInterval) clearInterval(updateTimesInterval);
+    updateTimesInterval = setInterval(updateTimes, 60000);
 
     findNearbyMosques(lat, lng);
 
@@ -577,6 +666,54 @@ window.onload = function() {
         if (gpsWatchId !== null) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
         latestGpsPos = null;
 
+        if (SIM_MODE) {
+            document.getElementById('sim-panel').style.display = 'block';
+            simSegIdx = 0; simSegDist = 0;
+            const [sLat, sLng] = SIM_ROUTE[0];
+            latestGpsPos = { coords: { latitude: sLat, longitude: sLng, accuracy: 15 } };
+            initApp(sLat, sLng);
+            updateSimPanel(sLat, sLng);
+            console.log('[SIM] انطلقت من تونس باتجاه نابل · كل 5 ثوانٍ = ~69م');
+
+            function simApplyPos(lat, lng, done) {
+                latestGpsPos = { coords: { latitude: lat, longitude: lng, accuracy: 15 } };
+                if (done) {
+                    updateSimPanel(lat, lng);
+                    document.getElementById('sim-location-name').textContent = '🏁 وصلت إلى نابل!';
+                    showGpsNotif('🏁 وصلت إلى نابل!', true);
+                    if (gpsTrackInterval) { clearInterval(gpsTrackInterval); gpsTrackInterval = null; }
+                    return;
+                }
+                const dist = haversineKm(currentLat, currentLng, lat, lng);
+                updateSimPanel(lat, lng);
+                const ts = new Date().toLocaleTimeString('ar-TN');
+                const remKm = haversineKm(lat, lng, SIM_DEST[0], SIM_DEST[1]);
+                if (dist > 0.05) {
+                    console.log(`[SIM ${ts}] ✅ موقع جديد — lat: ${lat.toFixed(6)}, lng: ${lng.toFixed(6)}, متبقي: ${remKm.toFixed(1)} كم`);
+                    initApp(lat, lng);
+                    showGpsNotif(`📍 موقع جديد: ${lat.toFixed(4)}, ${lng.toFixed(4)} · متبقي: ${remKm.toFixed(1)} كم`, true);
+                } else {
+                    console.log(`[SIM ${ts}] 📌 الموقع ثابت — متبقي: ${remKm.toFixed(1)} كم`);
+                    showGpsNotif(`📌 الموقع ثابت · متبقي: ${remKm.toFixed(1)} كم`, false);
+                }
+            }
+
+            const KM_PER_TICK = SIM_SPEED_KMH * 5 / 3600;
+            gpsTrackInterval = setInterval(() => {
+                if (document.getElementById('pos-mode-select').value !== 'auto') return;
+                const { lat, lng, done } = simAdvance(KM_PER_TICK);
+                simApplyPos(lat, lng, done);
+            }, 5000);
+
+            document.getElementById('sim-skip-btn').onclick = () => {
+                const km = parseFloat(document.getElementById('sim-skip-km').value) || 3;
+                const { lat, lng, done } = simAdvance(km);
+                simApplyPos(lat, lng, done);
+            };
+
+            return;
+        }
+
         if (!navigator.geolocation) {
             initApp(36.8190, 10.1658);
             return;
@@ -590,11 +727,17 @@ window.onload = function() {
                 initApp(pos.coords.latitude, pos.coords.longitude);
             }
         }, () => {
-            if (!initialized) {
-                initialized = true;
-                initApp(36.8190, 10.1658);
-            }
-        }, { enableHighAccuracy: true });
+            // high-accuracy timed out or unavailable → fall back to low accuracy
+            if (gpsWatchId !== null) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
+            gpsWatchId = navigator.geolocation.watchPosition(pos => {
+                latestGpsPos = pos;
+                if (!initialized) { initialized = true; initApp(pos.coords.latitude, pos.coords.longitude); }
+            }, () => {
+                if (!initialized) { initialized = true; initApp(36.8190, 10.1658); }
+                if (gpsTrackInterval) { clearInterval(gpsTrackInterval); gpsTrackInterval = null; }
+            }, { enableHighAccuracy: false, timeout: 10000 });
+            if (!initialized) { initialized = true; initApp(36.8190, 10.1658); }
+        }, { enableHighAccuracy: true, timeout: 8000 });
 
         gpsTrackInterval = setInterval(() => {
             if (document.getElementById('pos-mode-select').value !== 'auto') return;
