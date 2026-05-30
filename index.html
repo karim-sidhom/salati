@@ -225,7 +225,7 @@
     <div class="sec-head"><span>🧭</span><span>اتجاه القبلة</span></div>
     <div class="qibla-wrap">
         <div class="qibla-t">القبلة</div>
-        <div class="qibla-sub">Orientation de la Qibla</div>
+        <div class="qibla-sub">الاتجاه نحو الكعبة المشرفة</div>
         <div class="compass">
             <div class="compass-labels">
                 <span class="lbl-n">ش</span>
@@ -243,54 +243,6 @@
         <div class="gps-bar">
             <span>📡</span>
             <span id="gps-txt">يرجى تفعيل GPS لربط الإحداثيات العالمية</span>
-        </div>
-        <div class="gps-info" id="gps-info">
-            <div class="gps-info-title">مراقبة مصدر الإحداثيات</div>
-            <div class="gps-info-row">
-                <span class="gps-info-label">المصدر</span>
-                <span class="gps-info-value" id="gps-source">navigator.geolocation.watchPosition</span>
-            </div>
-            <div class="gps-info-row">
-                <span class="gps-info-label">طريقة الطلب</span>
-                <span class="gps-info-value" id="gps-request">enableHighAccuracy=true · maximumAge=0</span>
-            </div>
-            <div class="gps-info-row">
-                <span class="gps-info-label">سياسة التطبيق</span>
-                <span class="gps-info-status" id="gps-policy">لا IP، لا مدينة افتراضية، قبول الدقة العالية فقط</span>
-            </div>
-            <div class="gps-info-row">
-                <span class="gps-info-label">الحالة</span>
-                <span class="gps-info-status warn" id="gps-monitor-status">في انتظار GPS، دون IP أو موقع افتراضي</span>
-            </div>
-            <div class="gps-info-row">
-                <span class="gps-info-label">آخر قراءة</span>
-                <span class="gps-info-value" id="gps-monitor-coords">--</span>
-            </div>
-            <div class="gps-info-row">
-                <span class="gps-info-label">الموقع المستخدم</span>
-                <span class="gps-info-value" id="gps-monitor-used">--</span>
-            </div>
-            <div class="gps-info-row">
-                <span class="gps-info-label">المنطقة / المدينة</span>
-                <span class="gps-info-status" id="gps-monitor-place">--</span>
-            </div>
-            <div class="gps-info-row">
-                <span class="gps-info-label">الدقة</span>
-                <span class="gps-info-value" id="gps-monitor-accuracy">--</span>
-            </div>
-            <div class="gps-info-row">
-                <span class="gps-info-label">آخر تحديث</span>
-                <span class="gps-info-value" id="gps-monitor-time">--</span>
-            </div>
-            <div class="gps-info-row">
-                <span class="gps-info-label">المقبول / المرفوض</span>
-                <span class="gps-info-value" id="gps-monitor-counts">0 / 0</span>
-            </div>
-            <div class="gps-info-row">
-                <span class="gps-info-label">الحركة المرصودة</span>
-                <span class="gps-info-value" id="gps-monitor-movement">--</span>
-            </div>
-            <div class="gps-log" id="gps-log"></div>
         </div>
     </div>
 
@@ -403,8 +355,7 @@ function showGpsNotif(text, changed) {
 const historicalMosquesDB = [
     {
         id: "great_mosque_kairouan",
-        name: "Grande Mosquée de Kairouan",
-        arabicName: "جامع عقبة بن نافع",
+        name: "جامع عقبة بن نافع",
         wilaya: "Kairouan",
         city: "Kairouan",
         latitude: 35.681111,
@@ -412,12 +363,11 @@ const historicalMosquesDB = [
         foundationYear: 670,
         foundationYearLabel: "670",
         estimatedAgeYearsIn2026: 1356,
-        description: "La Grande Mosquée de Kairouan est l’un des monuments religieux les plus importants du monde islamique occidental. Fondée vers 670 par Oqba Ibn Nafi, elle marque la naissance de Kairouan comme centre religieux, politique et militaire de l’Ifriqiya."
+        description: "يعد جامع عقبة بن نافع بالقيروان من أهم المعالم الدينية في الغرب الإسلامي. تأسس نحو سنة 670، وشكل نواة مدينة القيروان ومركزها الديني والسياسي والعسكري في إفريقية."
     },
     {
         id: "zitouna_mosque",
-        name: "Mosquée Zitouna",
-        arabicName: "جامع الزيتونة",
+        name: "جامع الزيتونة",
         wilaya: "Tunis",
         city: "Tunis",
         latitude: 36.797222,
@@ -425,12 +375,11 @@ const historicalMosquesDB = [
         foundationYear: 699,
         foundationYearLabel: "699-704",
         estimatedAgeYearsIn2026: 1322,
-        description: "La mosquée Zitouna est le grand sanctuaire historique de la médina de Tunis. Sa fondation est généralement située entre 699 et 704, dans les premières décennies de l’islamisation de Tunis."
+        description: "جامع الزيتونة هو المعلم الديني التاريخي الأكبر في مدينة تونس العتيقة. تعود نشأته غالبا إلى الفترة بين 699 و704، وكان عبر القرون مركزا بارزا للصلاة والعلم والحياة العمرانية."
     },
     {
         id: "bou_ftata_mosque",
-        name: "Mosquée Bou Ftata",
-        arabicName: "جامع بوفتاتة",
+        name: "جامع بوفتاتة",
         wilaya: "Sousse",
         city: "Sousse",
         latitude: 35.822778,
@@ -438,12 +387,11 @@ const historicalMosquesDB = [
         foundationYear: 838,
         foundationYearLabel: "838-841",
         estimatedAgeYearsIn2026: 1185,
-        description: "La mosquée Bou Ftata est une petite mosquée aghlabide de Sousse, fondée probablement entre 838 et 841. Elle est connue pour sa façade ancienne, son porche à trois arcs et son inscription de fondation."
+        description: "جامع بوفتاتة بسوسة مسجد أغلبي صغير يرجح أنه تأسس بين 838 و841. تبرز قيمته في واجهته القديمة ورواقه ذي الأقواس الثلاثة ونقيشة التأسيس المحفوظة."
     },
     {
         id: "great_mosque_sfax",
-        name: "Grande Mosquée de Sfax",
-        arabicName: "الجامع الكبير بصفاقس",
+        name: "الجامع الكبير بصفاقس",
         wilaya: "Sfax",
         city: "Sfax",
         latitude: 34.735833,
@@ -451,12 +399,11 @@ const historicalMosquesDB = [
         foundationYear: 850,
         foundationYearLabel: "850",
         estimatedAgeYearsIn2026: 1176,
-        description: "La Grande Mosquée de Sfax est le principal monument religieux de la médina de Sfax. Fondée vers 850, elle occupe une position centrale dans la ville historique."
+        description: "الجامع الكبير بصفاقس هو المعلم الديني الرئيسي في المدينة العتيقة. تأسس نحو سنة 850، ويحتل موقعا مركزيا داخل النسيج التاريخي للمدينة."
     },
     {
         id: "great_mosque_sousse",
-        name: "Grande Mosquée de Sousse",
-        arabicName: "الجامع الكبير بسوسة",
+        name: "الجامع الكبير بسوسة",
         wilaya: "Sousse",
         city: "Sousse",
         latitude: 35.82695,
@@ -464,12 +411,11 @@ const historicalMosquesDB = [
         foundationYear: 851,
         foundationYearLabel: "851",
         estimatedAgeYearsIn2026: 1175,
-        description: "La Grande Mosquée de Sousse est l’un des monuments aghlabides majeurs du Sahel tunisien. Fondée en 851, elle se distingue par son aspect massif et presque fortifié."
+        description: "الجامع الكبير بسوسة من أبرز المعالم الأغلبية في الساحل التونسي. تأسس سنة 851، ويمتاز بطابعه المتين القريب من العمارة الدفاعية وبصلته بالمجال التاريخي قرب الرباط."
     },
     {
         id: "great_mosque_monastir",
-        name: "Grande Mosquée de Monastir",
-        arabicName: "الجامع الكبير بالمنستير",
+        name: "الجامع الكبير بالمنستير",
         wilaya: "Monastir",
         city: "Monastir",
         latitude: 35.775556,
@@ -477,12 +423,11 @@ const historicalMosquesDB = [
         foundationYear: 850,
         foundationYearLabel: "IXe siècle",
         estimatedAgeYearsIn2026: 1127,
-        description: "La Grande Mosquée de Monastir est située près du ribat et face à la mer, dans un environnement fortement marqué par l’histoire religieuse et militaire du littoral tunisien."
+        description: "يقع الجامع الكبير بالمنستير قرب الرباط ومقابلا للبحر، في فضاء ارتبط طويلا بالتاريخ الديني والعسكري للساحل التونسي. تعود مرحلته الأولى إلى القرن التاسع."
     },
     {
         id: "three_doors_mosque",
-        name: "Mosquée des Trois Portes",
-        arabicName: "مسجد الأبواب الثلاثة",
+        name: "مسجد الأبواب الثلاثة",
         wilaya: "Kairouan",
         city: "Kairouan",
         latitude: 35.676944,
@@ -490,12 +435,11 @@ const historicalMosquesDB = [
         foundationYear: 866,
         foundationYearLabel: "866",
         estimatedAgeYearsIn2026: 1160,
-        description: "La mosquée des Trois Portes, aussi appelée mosquée Ibn Khayroun, est l’un des monuments les plus précieux de Kairouan. Fondée en 866, elle est célèbre pour sa façade sculptée à trois arcs."
+        description: "مسجد الأبواب الثلاثة، المعروف أيضا بمسجد ابن خيرون، من أنفس معالم القيروان. تأسس سنة 866، واشتهر بواجهته المزخرفة ذات الأقواس الثلاثة ونقوشه الكوفية."
     },
     {
         id: "great_mosque_mahdia",
-        name: "Grande Mosquée de Mahdia",
-        arabicName: "الجامع الكبير بالمهدية",
+        name: "الجامع الكبير بالمهدية",
         wilaya: "Mahdia",
         city: "Mahdia",
         latitude: 35.503889,
@@ -503,12 +447,11 @@ const historicalMosquesDB = [
         foundationYear: 916,
         foundationYearLabel: "916",
         estimatedAgeYearsIn2026: 1110,
-        description: "La Grande Mosquée de Mahdia est un monument majeur de l’époque fatimide. Elle fut fondée en 916 sous le calife al-Mahdi, dans la nouvelle capitale fatimide de Mahdia."
+        description: "الجامع الكبير بالمهدية من أهم معالم العصر الفاطمي. تأسس سنة 916 في عهد الخليفة المهدي ضمن العاصمة الفاطمية الجديدة على الساحل."
     },
     {
         id: "sayeda_ribat_mosque",
-        name: "Ribat et mosquée de la Sayeda",
-        arabicName: "رباط ومسجد السيدة",
+        name: "رباط ومسجد السيدة",
         wilaya: "Monastir",
         city: "Monastir",
         latitude: null,
@@ -516,7 +459,7 @@ const historicalMosquesDB = [
         foundationYear: 850,
         foundationYearLabel: "Milieu du IXe siècle",
         estimatedAgeYearsIn2026: 1170,
-        description: "Le Ribat et mosquée de la Sayeda est un complexe religieux et défensif de Monastir. Les coordonnées GPS ne sont pas confirmées, donc il n’est pas utilisé pour le calcul du plus proche."
+        description: "رباط ومسجد السيدة مركب ديني ودفاعي بالمنستير يعود إلى الوسط التقريبي للقرن التاسع. إحداثياته غير مؤكدة، لذلك لا يدخل في حساب أقرب مسجد تاريخي."
     }
 ];
 
@@ -1088,7 +1031,7 @@ function updateHistoricalCard(lat, lng) {
         return;
     }
 
-    nameEl.innerText = `${match.arabicName} - ${match.name}`;
+    nameEl.innerText = match.name;
     ageEl.innerText = `العمر: ${match.estimatedAgeYearsIn2026} سنة`;
     cityEl.innerText = `${match.city} · ${match.dist.toFixed(1)} كم`;
     descEl.innerText = match.description;
