@@ -271,6 +271,10 @@
                 <span class="gps-info-value" id="gps-monitor-used">--</span>
             </div>
             <div class="gps-info-row">
+                <span class="gps-info-label">المنطقة / المدينة</span>
+                <span class="gps-info-status" id="gps-monitor-place">--</span>
+            </div>
+            <div class="gps-info-row">
                 <span class="gps-info-label">الدقة</span>
                 <span class="gps-info-value" id="gps-monitor-accuracy">--</span>
             </div>
@@ -317,6 +321,9 @@ let gpsMonitor = {
     totalKm: 0,
     log: [],
 };
+let gpsPlaceRequestSeq = 0;
+let gpsPlaceLastKey = '';
+const gpsPlaceCache = new Map();
 
 const SIM_MODE = new URLSearchParams(window.location.search).get('simulation_test') === 'true';
 if (SIM_MODE) console.warn('[SIM] وضع المحاكاة مفعّل: تونس → نابل · طريق A1 · 50 كم/س');
@@ -651,6 +658,33 @@ function formatGpsCoords(coords) {
     return `${coords.latitude.toFixed(6)}, ${coords.longitude.toFixed(6)}`;
 }
 
+function formatGeoPlace(geo) {
+    if (!geo) return '';
+    const parts = [geo.city, geo.state, geo.country].filter(Boolean);
+    return [...new Set(parts)].join('، ');
+}
+
+function updateGpsMonitorPlaceFromGeo(geo) {
+    setGpsMonitorText('gps-monitor-place', formatGeoPlace(geo) || 'تعذّر تحديد اسم المنطقة');
+}
+
+function updateGpsMonitorPlace(lat, lng) {
+    const key = `${lat.toFixed(3)},${lng.toFixed(3)}`;
+    if (gpsPlaceCache.has(key)) {
+        updateGpsMonitorPlaceFromGeo(gpsPlaceCache.get(key));
+        gpsPlaceLastKey = key;
+        return;
+    }
+    if (gpsPlaceLastKey === key) return;
+    gpsPlaceLastKey = key;
+    const seq = ++gpsPlaceRequestSeq;
+    setGpsMonitorText('gps-monitor-place', 'جاري تحديد اسم المنطقة...');
+    reverseGeocode(lat, lng).then(geo => {
+        gpsPlaceCache.set(key, geo);
+        if (seq === gpsPlaceRequestSeq) updateGpsMonitorPlaceFromGeo(geo);
+    });
+}
+
 function renderGpsLog() {
     const logEl = document.getElementById('gps-log');
     if (!logEl) return;
@@ -676,11 +710,13 @@ function renderGpsLog() {
 
 function resetGpsMonitor(status = 'في انتظار GPS، دون IP أو موقع افتراضي') {
     gpsMonitor = { accepted: 0, rejected: 0, lastAccepted: null, totalKm: 0, log: [] };
+    gpsPlaceLastKey = '';
     setGpsMonitorText('gps-source', 'navigator.geolocation.watchPosition');
     setGpsMonitorText('gps-request', `enableHighAccuracy=true · maximumAge=0 · accepted<=${GPS_REQUIRED_ACCURACY_M}m`);
     setGpsMonitorStatus(status, 'warn');
     setGpsMonitorText('gps-monitor-coords', '--');
     setGpsMonitorText('gps-monitor-used', '--');
+    setGpsMonitorText('gps-monitor-place', '--');
     setGpsMonitorText('gps-monitor-accuracy', '--');
     setGpsMonitorText('gps-monitor-time', '--');
     setGpsMonitorText('gps-monitor-counts', '0 / 0');
@@ -716,6 +752,7 @@ function recordGpsReading(pos, accepted, reason) {
             timestamp,
         };
         setGpsMonitorText('gps-monitor-used', coordsText);
+        updateGpsMonitorPlace(coords.latitude, coords.longitude);
         setGpsMonitorStatus('مقبول: إحداثيات GPS عالية الدقة', '');
     } else {
         gpsMonitor.rejected++;
@@ -749,6 +786,7 @@ function recordManualPosition(lat, lng) {
     setGpsMonitorStatus('إدخال يدوي، لا توجد قراءة GPS مباشرة', 'warn');
     setGpsMonitorText('gps-monitor-coords', `${lat.toFixed(6)}, ${lng.toFixed(6)}`);
     setGpsMonitorText('gps-monitor-used', `${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+    updateGpsMonitorPlace(lat, lng);
     setGpsMonitorText('gps-monitor-accuracy', 'يدوي');
     setGpsMonitorText('gps-monitor-time', formatGpsTime(Date.now()));
     setGpsMonitorText('gps-monitor-counts', 'يدوي');
@@ -895,6 +933,7 @@ function initApp(lat, lng) {
     // تفتيش قاعدة البيانات التاريخية للمعالم
     reverseGeocode(lat, lng).then(geo => {
         updateHistoricalCard(geo.countryCode, geo.city);
+        updateGpsMonitorPlaceFromGeo(geo);
         if (document.getElementById('pos-mode-select').value === 'manual') {
             const info = document.getElementById('manual-location-info');
             const parts = [geo.city, geo.state, geo.country].filter(Boolean);
