@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>مواقيت الصلاة والمساجد التاريخية - LORD</title>
     <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cairo:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css" rel="stylesheet">
     <style>
         :root {
             --bg:        #0b1e1a;
@@ -206,6 +207,7 @@
     <button class="dl-btn" id="dl-btn">تحميل التطبيق المطور 📥</button>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
 <script>
 const d2r = d => d * Math.PI / 180;
 const r2d = r => r * 180 / Math.PI;
@@ -215,6 +217,31 @@ const fixAngle = a => a - 360 * Math.floor(a / 360);
 let currentLat = 36.8190;
 let currentLng = 10.1658;
 let countdownInterval = null;
+let gpsTrackInterval = null;
+let gpsWatchId = null;
+let latestGpsPos = null;
+
+function showGpsNotif(text, changed) {
+    Toastify({
+        text,
+        duration: 4000,
+        gravity: 'bottom',
+        position: 'right',
+        stopOnFocus: false,
+        style: {
+            background: changed ? 'rgba(19,180,160,0.92)' : 'rgba(30,60,54,0.95)',
+            color: changed ? '#fff' : '#7a9e96',
+            border: changed ? '1px solid #13b4a0' : '1px solid rgba(122,158,150,0.3)',
+            borderRadius: '10px',
+            fontFamily: "'Cairo', sans-serif",
+            fontSize: '13px',
+            fontWeight: '600',
+            padding: '10px 16px',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+            direction: 'rtl',
+        }
+    }).showToast();
+}
 
 const historicalMosquesDB = [
     { country: "TN", city: "Tunis", name: "جامع الزيتونة المعمور", yearBuilt: 698, desc: "تأسس في قلب المدينة العتيقة على يد حسان بن النعمان، ويعد منارة علمية ودينية رائدة في المغرب العربي.", lat: 36.7972, lng: 10.1711 },
@@ -539,21 +566,57 @@ function initApp(lat, lng) {
 window.onload = function() {
     document.getElementById('hijri-date').innerText = getHijriDate();
 
+
     const posModeSelect = document.getElementById('pos-mode-select');
     const manualPanel   = document.getElementById('manual-pos-panel');
     const applyBtn      = document.getElementById('apply-pos-btn');
     const posError      = document.getElementById('pos-error');
 
     function startGPS() {
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                pos => initApp(pos.coords.latitude, pos.coords.longitude),
-                ()  => initApp(36.8190, 10.1658),
-                { enableHighAccuracy: true, timeout: 10000 }
-            );
-        } else {
+        if (gpsTrackInterval) { clearInterval(gpsTrackInterval); gpsTrackInterval = null; }
+        if (gpsWatchId !== null) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
+        latestGpsPos = null;
+
+        if (!navigator.geolocation) {
             initApp(36.8190, 10.1658);
+            return;
         }
+
+        let initialized = false;
+        gpsWatchId = navigator.geolocation.watchPosition(pos => {
+            latestGpsPos = pos;
+            if (!initialized) {
+                initialized = true;
+                initApp(pos.coords.latitude, pos.coords.longitude);
+            }
+        }, () => {
+            if (!initialized) {
+                initialized = true;
+                initApp(36.8190, 10.1658);
+            }
+        }, { enableHighAccuracy: true });
+
+        gpsTrackInterval = setInterval(() => {
+            if (document.getElementById('pos-mode-select').value !== 'auto') return;
+            const ts = new Date().toLocaleTimeString('ar-TN');
+            if (!latestGpsPos) {
+                console.warn(`[GPS ${ts}] لا يوجد موقع متاح`);
+                showGpsNotif('⚠️ تعذّر تحديد الموقع', false);
+                return;
+            }
+            const newLat = latestGpsPos.coords.latitude;
+            const newLng = latestGpsPos.coords.longitude;
+            const acc = latestGpsPos.coords.accuracy;
+            const dist = haversineKm(currentLat, currentLng, newLat, newLng);
+            if (dist > 0.05) {
+                console.log(`[GPS ${ts}] ✅ موقع جديد — lat: ${newLat.toFixed(6)}, lng: ${newLng.toFixed(6)}, دقة: ${acc.toFixed(0)}م, تغيّر: ${(dist*1000).toFixed(0)}م`);
+                initApp(newLat, newLng);
+                showGpsNotif(`📍 موقع جديد: ${newLat.toFixed(4)}, ${newLng.toFixed(4)} · دقة ${acc.toFixed(0)}م`, true);
+            } else {
+                console.log(`[GPS ${ts}] 📌 الموقع ثابت — lat: ${currentLat.toFixed(6)}, lng: ${currentLng.toFixed(6)}, دقة: ${acc.toFixed(0)}م, فرق: ${(dist*1000).toFixed(1)}م`);
+                showGpsNotif(`📌 الموقع ثابت: ${currentLat.toFixed(4)}, ${currentLng.toFixed(4)} · دقة ${acc.toFixed(0)}م`, false);
+            }
+        }, 5000);
     }
 
     function applyManual() {
@@ -577,6 +640,8 @@ window.onload = function() {
         } else {
             manualPanel.style.display = 'none';
             document.getElementById('manual-location-info').style.display = 'none';
+            if (gpsTrackInterval) { clearInterval(gpsTrackInterval); gpsTrackInterval = null; }
+            if (gpsWatchId !== null) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
             startGPS();
         }
     };
