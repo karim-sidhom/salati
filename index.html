@@ -312,6 +312,8 @@ let gpsWatchId = null;
 let latestGpsPos = null;
 let updateTimesInterval = null;
 const GPS_REQUIRED_ACCURACY_M = 100;
+const GPS_MAX_FIX_AGE_MS = 30000;
+const GPS_APPLY_DISTANCE_KM = 0.05;
 const GPS_OPTIONS = { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 };
 const GPS_LOG_LIMIT = 8;
 let gpsMonitor = {
@@ -325,6 +327,7 @@ let gpsPlaceRequestSeq = 0;
 let gpsPlaceLastKey = '';
 const gpsPlaceCache = new Map();
 let mosqueSearchSeq = 0;
+let appLocationSeq = 0;
 
 const SIM_MODE = new URLSearchParams(window.location.search).get('simulation_test') === 'true';
 if (SIM_MODE) console.warn('[SIM] وضع المحاكاة مفعّل: تونس → نابل · طريق A1 · 50 كم/س');
@@ -610,6 +613,8 @@ function setHistoricalPlaceholder(message) {
 }
 
 function resetLocationView(message) {
+    appLocationSeq++;
+    mosqueSearchSeq++;
     currentLat = null;
     currentLng = null;
     latestGpsPos = null;
@@ -629,9 +634,26 @@ function resetLocationView(message) {
     mosqueState(message);
 }
 
+function formatGpsAge(ms) {
+    if (!Number.isFinite(ms)) return 'العمر غير معروف';
+    if (ms < 1000) return 'الآن';
+    if (ms < 60000) return `${Math.round(ms / 1000)}ث`;
+    return `${Math.round(ms / 60000)}د`;
+}
+
+function getGpsRejectReason(pos) {
+    const coords = pos && pos.coords ? pos.coords : null;
+    if (!coords) return 'لا توجد إحداثيات';
+    const acc = coords.accuracy;
+    if (!Number.isFinite(acc)) return 'الدقة غير معروفة';
+    if (acc > GPS_REQUIRED_ACCURACY_M) return `الدقة أكبر من ${GPS_REQUIRED_ACCURACY_M}م`;
+    const ageMs = Number.isFinite(pos.timestamp) ? Math.max(0, Date.now() - pos.timestamp) : Infinity;
+    if (ageMs > GPS_MAX_FIX_AGE_MS) return `قراءة GPS قديمة (${formatGpsAge(ageMs)})`;
+    return '';
+}
+
 function isAccurateGpsPosition(pos) {
-    const acc = pos && pos.coords ? pos.coords.accuracy : Infinity;
-    return Number.isFinite(acc) && acc <= GPS_REQUIRED_ACCURACY_M;
+    return getGpsRejectReason(pos) === '';
 }
 
 function setGpsMonitorText(id, value) {
@@ -657,7 +679,11 @@ function formatGpsTime(ts) {
 
 function formatGpsCoords(coords) {
     if (!coords) return '--';
-    return `${coords.latitude.toFixed(6)}, ${coords.longitude.toFixed(6)}`;
+    return formatLatLng(coords.latitude, coords.longitude);
+}
+
+function formatLatLng(lat, lng) {
+    return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
 }
 
 function formatGeoPlace(geo) {
@@ -712,9 +738,10 @@ function renderGpsLog() {
 
 function resetGpsMonitor(status = 'في انتظار GPS، دون IP أو موقع افتراضي') {
     gpsMonitor = { accepted: 0, rejected: 0, lastAccepted: null, totalKm: 0, log: [] };
+    gpsPlaceRequestSeq++;
     gpsPlaceLastKey = '';
     setGpsMonitorText('gps-source', 'navigator.geolocation.watchPosition');
-    setGpsMonitorText('gps-request', `enableHighAccuracy=true · maximumAge=0 · accepted<=${GPS_REQUIRED_ACCURACY_M}m`);
+    setGpsMonitorText('gps-request', `enableHighAccuracy=true · maximumAge=0 · accepted<=${GPS_REQUIRED_ACCURACY_M}m · age<=${GPS_MAX_FIX_AGE_MS / 1000}s`);
     setGpsMonitorStatus(status, 'warn');
     setGpsMonitorText('gps-monitor-coords', '--');
     setGpsMonitorText('gps-monitor-used', '--');
@@ -753,8 +780,6 @@ function recordGpsReading(pos, accepted, reason) {
             accuracy: coords.accuracy,
             timestamp,
         };
-        setGpsMonitorText('gps-monitor-used', coordsText);
-        updateGpsMonitorPlace(coords.latitude, coords.longitude);
         setGpsMonitorStatus('مقبول: إحداثيات GPS عالية الدقة', '');
     } else {
         gpsMonitor.rejected++;
@@ -786,14 +811,38 @@ function recordManualPosition(lat, lng) {
     setGpsMonitorText('gps-source', 'manual coordinates input');
     setGpsMonitorText('gps-request', 'manual mode');
     setGpsMonitorStatus('إدخال يدوي، لا توجد قراءة GPS مباشرة', 'warn');
-    setGpsMonitorText('gps-monitor-coords', `${lat.toFixed(6)}, ${lng.toFixed(6)}`);
-    setGpsMonitorText('gps-monitor-used', `${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+    setGpsMonitorText('gps-monitor-coords', formatLatLng(lat, lng));
+    setGpsMonitorText('gps-monitor-used', formatLatLng(lat, lng));
     updateGpsMonitorPlace(lat, lng);
     setGpsMonitorText('gps-monitor-accuracy', 'يدوي');
     setGpsMonitorText('gps-monitor-time', formatGpsTime(Date.now()));
     setGpsMonitorText('gps-monitor-counts', 'يدوي');
     setGpsMonitorText('gps-monitor-movement', '--');
     renderGpsLog();
+}
+
+function applyGpsPosition(pos, notifyOnChange = true) {
+    const coords = pos.coords;
+    const newLat = coords.latitude;
+    const newLng = coords.longitude;
+    const acc = coords.accuracy;
+    const accText = Number.isFinite(acc) ? `${Math.round(acc)}م` : 'غير معروفة';
+    const hasCurrentFix = Number.isFinite(currentLat) && Number.isFinite(currentLng);
+    const dist = hasCurrentFix ? haversineKm(currentLat, currentLng, newLat, newLng) : Infinity;
+    const ts = new Date().toLocaleTimeString('ar-TN');
+
+    if (!hasCurrentFix || dist > GPS_APPLY_DISTANCE_KM) {
+        const movementText = hasCurrentFix ? `تغيّر ${(dist * 1000).toFixed(0)}م` : 'أول تثبيت';
+        console.log(`[GPS ${ts}] ✅ تطبيق الموقع — lat: ${newLat.toFixed(6)}, lng: ${newLng.toFixed(6)}, دقة: ${accText}, ${movementText}`);
+        initApp(newLat, newLng);
+        if (hasCurrentFix && notifyOnChange) {
+            showGpsNotif(`📍 موقع جديد: ${newLat.toFixed(4)}, ${newLng.toFixed(4)} · دقة ${accText}`, true);
+        }
+        return true;
+    }
+
+    console.log(`[GPS ${ts}] 📌 الموقع ثابت — lat: ${currentLat.toFixed(6)}, lng: ${currentLng.toFixed(6)}, دقة: ${accText}, فرق: ${(dist * 1000).toFixed(1)}م`);
+    return false;
 }
 
 async function findNearbyMosques(lat, lon, geoSource = null) {
@@ -914,6 +963,7 @@ function updateHistoricalCard(countryCode, city) {
 }
 
 function initApp(lat, lng) {
+    const appSeq = ++appLocationSeq;
     currentLat = lat;
     currentLng = lng;
     
@@ -921,6 +971,7 @@ function initApp(lat, lng) {
     document.getElementById('gps-txt').innerText = isManual
         ? `موقع يدوي: ${lat.toFixed(4)}, ${lng.toFixed(4)}`
         : `GPS نشط: ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    setGpsMonitorText('gps-monitor-used', formatLatLng(lat, lng));
     document.getElementById('global-maps-link').href = `https://www.google.com/maps/search/?api=1&query=mosque&center=${lat},${lng}`;
     
     // حساب وعرض اتجاه القبلة وحركة إبرة البوصلة
@@ -948,6 +999,7 @@ function initApp(lat, lng) {
 
     // تفتيش قاعدة البيانات التاريخية للمعالم
     geoPromise.then(geo => {
+        if (appSeq !== appLocationSeq) return;
         updateHistoricalCard(geo.countryCode, geo.city);
         updateGpsMonitorPlaceFromGeo(geo);
         if (document.getElementById('pos-mode-select').value === 'manual') {
@@ -993,6 +1045,7 @@ window.onload = function() {
                 latestGpsPos = { coords: { latitude: lat, longitude: lng, accuracy: 15 }, timestamp: Date.now() };
                 recordGpsReading(latestGpsPos, true, done ? 'محاكاة: الوصول' : 'محاكاة: نقطة جديدة');
                 if (done) {
+                    initApp(lat, lng);
                     updateSimPanel(lat, lng);
                     document.getElementById('sim-location-name').textContent = '🏁 وصلت إلى نابل!';
                     showGpsNotif('🏁 وصلت إلى نابل!', true);
@@ -1003,7 +1056,7 @@ window.onload = function() {
                 updateSimPanel(lat, lng);
                 const ts = new Date().toLocaleTimeString('ar-TN');
                 const remKm = haversineKm(lat, lng, SIM_DEST[0], SIM_DEST[1]);
-                if (dist > 0.05) {
+                if (dist > GPS_APPLY_DISTANCE_KM) {
                     console.log(`[SIM ${ts}] ✅ موقع جديد — lat: ${lat.toFixed(6)}, lng: ${lng.toFixed(6)}, متبقي: ${remKm.toFixed(1)} كم`);
                     initApp(lat, lng);
                     showGpsNotif(`📍 موقع جديد: ${lat.toFixed(4)}, ${lng.toFixed(4)} · متبقي: ${remKm.toFixed(1)} كم`, true);
@@ -1057,22 +1110,21 @@ window.onload = function() {
         let initialized = false;
         gpsWatchId = navigator.geolocation.watchPosition(pos => {
             const acc = pos.coords.accuracy;
-            if (!isAccurateGpsPosition(pos)) {
+            const rejectReason = getGpsRejectReason(pos);
+            if (rejectReason) {
                 const accText = Number.isFinite(acc) ? `${Math.round(acc)}م` : 'غير معروفة';
-                const msg = `📡 تم تجاهل موقع غير دقيق (${accText}) — في انتظار GPS`;
-                recordGpsReading(pos, false, `الدقة أكبر من ${GPS_REQUIRED_ACCURACY_M}م`);
+                const msg = `📡 تم تجاهل قراءة GPS (${accText}) — ${rejectReason}`;
+                recordGpsReading(pos, false, rejectReason);
                 document.getElementById('gps-txt').textContent = msg;
                 document.getElementById('gps-txt').style.color = '#d4a017';
                 if (!initialized) mosqueState('في انتظار إشارة GPS دقيقة...');
-                console.warn(`[GPS] تم تجاهل موقع غير دقيق: ${accText}`);
+                console.warn(`[GPS] تم تجاهل القراءة: ${rejectReason}`);
                 return;
             }
             latestGpsPos = pos;
-            recordGpsReading(pos, true, `الدقة ضمن ${GPS_REQUIRED_ACCURACY_M}م`);
-            if (!initialized) {
-                initialized = true;
-                initApp(pos.coords.latitude, pos.coords.longitude);
-            }
+            recordGpsReading(pos, true, `الدقة ضمن ${GPS_REQUIRED_ACCURACY_M}م والقراءة حديثة`);
+            applyGpsPosition(pos, initialized);
+            initialized = true;
         }, err => {
             if (!initialized || (err && err.code === 1)) {
                 showGpsError(err);
@@ -1086,31 +1138,6 @@ window.onload = function() {
             }
         }, GPS_OPTIONS);
 
-        gpsTrackInterval = setInterval(() => {
-            if (document.getElementById('pos-mode-select').value !== 'auto') return;
-            const ts = new Date().toLocaleTimeString('ar-TN');
-            if (!latestGpsPos) {
-                console.warn(`[GPS ${ts}] لا يوجد موقع بعد — في انتظار إشارة GPS`);
-                return;
-            }
-            const newLat = latestGpsPos.coords.latitude;
-            const newLng = latestGpsPos.coords.longitude;
-            const acc = latestGpsPos.coords.accuracy;
-            if (!isAccurateGpsPosition(latestGpsPos)) {
-                console.warn(`[GPS ${ts}] تم تجاهل موقع غير دقيق: ${Number.isFinite(acc) ? acc.toFixed(0) + 'م' : 'غير معروف'}`);
-                return;
-            }
-            const hasCurrentFix = Number.isFinite(currentLat) && Number.isFinite(currentLng);
-            const dist = hasCurrentFix ? haversineKm(currentLat, currentLng, newLat, newLng) : Infinity;
-            if (dist > 0.05) {
-                console.log(`[GPS ${ts}] ✅ موقع جديد — lat: ${newLat.toFixed(6)}, lng: ${newLng.toFixed(6)}, دقة: ${acc.toFixed(0)}م, تغيّر: ${(dist*1000).toFixed(0)}م`);
-                initApp(newLat, newLng);
-                showGpsNotif(`📍 موقع جديد: ${newLat.toFixed(4)}, ${newLng.toFixed(4)} · دقة ${acc.toFixed(0)}م`, true);
-            } else {
-                console.log(`[GPS ${ts}] 📌 الموقع ثابت — lat: ${currentLat.toFixed(6)}, lng: ${currentLng.toFixed(6)}, دقة: ${acc.toFixed(0)}م, فرق: ${(dist*1000).toFixed(1)}م`);
-                showGpsNotif(`📌 الموقع ثابت: ${currentLat.toFixed(4)}, ${currentLng.toFixed(4)} · دقة ${acc.toFixed(0)}م`, false);
-            }
-        }, 5000);
     }
 
     function applyManual() {
