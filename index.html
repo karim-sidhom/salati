@@ -328,6 +328,7 @@ let gpsPlaceLastKey = '';
 const gpsPlaceCache = new Map();
 let mosqueSearchSeq = 0;
 let appLocationSeq = 0;
+const MOSQUE_SEARCH_RADII_KM = [1, 3, 5, 10, 15, 25];
 
 const SIM_MODE = new URLSearchParams(window.location.search).get('simulation_test') === 'true';
 if (SIM_MODE) console.warn('[SIM] وضع المحاكاة مفعّل: تونس → نابل · طريق A1 · 50 كم/س');
@@ -572,7 +573,7 @@ function mosqueState(msg) {
     list.appendChild(d);
 }
 
-function renderMosques(items, radiusKm, shown = 5, placeLabel = '') {
+function renderMosques(items, radiusKm, shown = 5, placeLabel = '', onExpand = null) {
     const placeSuffix = placeLabel ? ` - ${placeLabel}` : '';
     document.getElementById('zone-title').textContent = `أقرب المساجد إليكم${placeSuffix} (ضمن ${radiusKm} كم)`;
     const list = document.getElementById('mosque-list');
@@ -595,7 +596,13 @@ function renderMosques(items, radiusKm, shown = 5, placeLabel = '') {
         const more = document.createElement('button');
         more.className = 'load-more-btn';
         more.textContent = `عرض 5 مساجد أخرى ··· ${rem} متبقية`;
-        more.onclick = () => renderMosques(items, radiusKm, shown + 5, placeLabel);
+        more.onclick = () => renderMosques(items, radiusKm, shown + 5, placeLabel, onExpand);
+        list.appendChild(more);
+    } else if (onExpand) {
+        const more = document.createElement('button');
+        more.className = 'load-more-btn';
+        more.textContent = 'توسيع نطاق البحث عن مساجد أخرى';
+        more.onclick = onExpand;
         list.appendChild(more);
     }
 }
@@ -845,43 +852,27 @@ function applyGpsPosition(pos, notifyOnChange = true) {
     return false;
 }
 
+function mosqueViewboxForRadius(lat, lon, radiusKm) {
+    const latDelta = radiusKm / 111.32;
+    const lonDelta = radiusKm / (111.32 * Math.max(Math.cos(d2r(lat)), 0.1));
+    return `${(lon-lonDelta).toFixed(5)},${(lat-latDelta).toFixed(5)},${(lon+lonDelta).toFixed(5)},${(lat+latDelta).toFixed(5)}`;
+}
+
+async function fetchMosquesInRadius(lat, lon, radiusKm, ctrl) {
+    const vb = mosqueViewboxForRadius(lat, lon, radiusKm);
+    const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&amenity=place_of_worship&viewbox=${vb}&bounded=1&limit=50&accept-language=ar`;
+    const res = await fetch(url, { signal: ctrl.signal });
+    if (!res.ok) throw new Error('bad status');
+    return { places: await res.json(), viewbox: vb, url };
+}
+
 async function findNearbyMosques(lat, lon, geoSource = null) {
     const searchSeq = ++mosqueSearchSeq;
     mosqueState('جاري البحث عن أقرب المساجد...');
 
-    const D = 0.45;
-    const vb = `${(lon-D).toFixed(5)},${(lat-D).toFixed(5)},${(lon+D).toFixed(5)},${(lat+D).toFixed(5)}`;
-    const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&amenity=place_of_worship&viewbox=${vb}&bounded=1&limit=100&accept-language=ar`;
     const geo = geoSource ? await geoSource : await reverseGeocode(lat, lon);
     if (searchSeq !== mosqueSearchSeq) return;
     const placeLabel = formatGeoPlace(geo);
-
-    console.log('[MOSQUE SEARCH]', {
-        center: `${lat.toFixed(6)}, ${lon.toFixed(6)}`,
-        viewbox: vb,
-        place: placeLabel || 'غير محدد',
-        url,
-    });
-
-    let places;
-    try {
-        const ctrl = new AbortController();
-        const t = setTimeout(() => ctrl.abort(), 12000);
-        const res = await fetch(url, { signal: ctrl.signal });
-        clearTimeout(t);
-        if (!res.ok) throw new Error('bad status');
-        places = await res.json();
-    } catch (e) {
-        if (searchSeq !== mosqueSearchSeq) return;
-        mosqueState('تعذّر الاتصال بخوادم الخرائط، يرجى المحاولة لاحقاً.');
-        return;
-    }
-    if (searchSeq !== mosqueSearchSeq) return;
-
-    if (!places || places.length === 0) {
-        mosqueState('لم يتم العثور على مساجد ضمن 50 كم من موقعكم.');
-        return;
-    }
 
     const NON_MOSQUE = [
         // Arabic
@@ -892,7 +883,7 @@ async function findNearbyMosques(lat, lon, geoSource = null) {
         'église','eglise','cathédrale','cathedrale','chapelle','monastère','monastere','couvent','basilique','paroisse','prieuré','prieure','abbaye',
     ];
 
-    const all = places.map(p => {
+    const normalizePlaces = places => places.map(p => {
         const mLat = parseFloat(p.lat), mLon = parseFloat(p.lon);
         const name = p.name || (p.display_name && p.display_name.split(',')[0].trim()) || 'مسجد';
         return { name, lat: mLat, lon: mLon, dist: haversineKm(lat, lon, mLat, mLon) };
@@ -903,15 +894,58 @@ async function findNearbyMosques(lat, lon, geoSource = null) {
         return true;
     }).sort((a, b) => a.dist - b.dist);
 
-    let items = [], radiusKm = 50;
-    for (const r of [5, 10, 15, 25, 50]) {
-        items = all.filter(m => m.dist <= r);
-        if (items.length > 0) { radiusKm = r; break; }
+    async function searchRadius(radiusIndex, requireResults = true) {
+        const radiusKm = MOSQUE_SEARCH_RADII_KM[radiusIndex];
+        if (!radiusKm) return false;
+        mosqueState(`جاري البحث عن المساجد ضمن ${radiusKm} كم...`);
+
+        let payload;
+        let t = null;
+        try {
+            const ctrl = new AbortController();
+            t = setTimeout(() => ctrl.abort(), 12000);
+            payload = await fetchMosquesInRadius(lat, lon, radiusKm, ctrl);
+        } catch (e) {
+            if (searchSeq !== mosqueSearchSeq) return true;
+            mosqueState('تعذّر الاتصال بخوادم الخرائط، يرجى المحاولة لاحقاً.');
+            return true;
+        } finally {
+            if (t) clearTimeout(t);
+        }
+        if (searchSeq !== mosqueSearchSeq) return true;
+
+        console.log('[MOSQUE SEARCH]', {
+            center: `${lat.toFixed(6)}, ${lon.toFixed(6)}`,
+            radiusKm,
+            viewbox: payload.viewbox,
+            place: placeLabel || 'غير محدد',
+            url: payload.url,
+        });
+
+        const items = normalizePlaces(payload.places || []).filter(m => m.dist <= radiusKm);
+        if (items.length === 0) {
+            if (requireResults) return false;
+            mosqueState(`لم يتم العثور على مساجد ضمن ${radiusKm} كم من موقعكم.`);
+            return true;
+        }
+
+        const hasNextRadius = radiusIndex < MOSQUE_SEARCH_RADII_KM.length - 1;
+        renderMosques(
+            items,
+            radiusKm,
+            5,
+            placeLabel,
+            hasNextRadius ? () => searchRadius(radiusIndex + 1, false) : null
+        );
+        return true;
     }
 
-    if (items.length === 0) { mosqueState('لم يتم العثور على مساجد ضمن 50 كم من موقعكم.'); return; }
+    for (let i = 0; i < MOSQUE_SEARCH_RADII_KM.length; i++) {
+        if (await searchRadius(i)) return;
+    }
 
-    renderMosques(items, radiusKm, 5, placeLabel);
+    const maxRadius = MOSQUE_SEARCH_RADII_KM[MOSQUE_SEARCH_RADII_KM.length - 1];
+    mosqueState(`لم يتم العثور على مساجد ضمن ${maxRadius} كم من موقعكم.`);
 }
 
 async function reverseGeocode(lat, lon) {
