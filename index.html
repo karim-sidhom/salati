@@ -242,13 +242,15 @@ const r2d = r => r * 180 / Math.PI;
 const fixHour  = h => h - 24 * Math.floor(h / 24);
 const fixAngle = a => a - 360 * Math.floor(a / 360);
 
-let currentLat = 36.8190;
-let currentLng = 10.1658;
+let currentLat = null;
+let currentLng = null;
 let countdownInterval = null;
 let gpsTrackInterval = null;
 let gpsWatchId = null;
 let latestGpsPos = null;
 let updateTimesInterval = null;
+const GPS_REQUIRED_ACCURACY_M = 500;
+const GPS_OPTIONS = { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 };
 
 const SIM_MODE = new URLSearchParams(window.location.search).get('simulation_test') === 'true';
 if (SIM_MODE) console.warn('[SIM] وضع المحاكاة مفعّل: تونس → نابل · طريق A1 · 50 كم/س');
@@ -520,6 +522,42 @@ function renderMosques(items, radiusKm, shown = 5) {
     }
 }
 
+function setHistoricalPlaceholder(message) {
+    const btn = document.getElementById('hist-map-btn');
+    document.getElementById('hist-name').innerText = message;
+    document.getElementById('hist-age').innerText = 'العمر: --';
+    document.getElementById('hist-city').innerText = 'المدينة: --';
+    document.getElementById('hist-desc').innerText = 'سيظهر هنا المسجد الأقدم بعد الحصول على إحداثيات GPS دقيقة.';
+    btn.removeAttribute('href');
+    btn.setAttribute('aria-disabled', 'true');
+    btn.style.pointerEvents = 'none';
+    btn.style.opacity = '0.55';
+}
+
+function resetLocationView(message) {
+    currentLat = null;
+    currentLng = null;
+    latestGpsPos = null;
+
+    if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
+    if (updateTimesInterval) { clearInterval(updateTimesInterval); updateTimesInterval = null; }
+
+    document.getElementById('next-prayer-name').textContent = '--';
+    document.getElementById('cd-timer').textContent = '00:00:00';
+    document.getElementById('prayer-grid').innerHTML = '';
+    document.getElementById('global-maps-link').href = '#';
+    document.getElementById('qibla-deg').innerText = '--°';
+    document.getElementById('needle').style.transform = 'translateX(-50%) rotate(0deg)';
+    document.getElementById('zone-title').textContent = 'أقرب المساجد إليكم';
+    setHistoricalPlaceholder('في انتظار تحديد GPS...');
+    mosqueState(message);
+}
+
+function isAccurateGpsPosition(pos) {
+    const acc = pos && pos.coords ? pos.coords.accuracy : Infinity;
+    return Number.isFinite(acc) && acc <= GPS_REQUIRED_ACCURACY_M;
+}
+
 async function findNearbyMosques(lat, lon) {
     mosqueState('جاري البحث عن أقرب المساجد...');
 
@@ -579,6 +617,7 @@ async function findNearbyMosques(lat, lon) {
 async function reverseGeocode(lat, lon) {
     try {
         const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&accept-language=ar`);
+        if (!res.ok) throw new Error('bad status');
         const data = await res.json();
         if(data && data.address) {
             const countryCode = data.address.country_code ? data.address.country_code.toUpperCase() : "";
@@ -588,7 +627,7 @@ async function reverseGeocode(lat, lon) {
             return { countryCode, city, state, country };
         }
     } catch(e) { console.error(e); }
-    return { countryCode: "TN", city: "Tunis", state: "", country: "" };
+    return { countryCode: "", city: "", state: "", country: "" };
 }
 
 function updateHistoricalCard(countryCode, city) {
@@ -597,10 +636,19 @@ function updateHistoricalCard(countryCode, city) {
     const cityEl = document.getElementById('hist-city');
     const descEl = document.getElementById('hist-desc');
     const btn = document.getElementById('hist-map-btn');
+    const safeCountryCode = countryCode || "";
+    const safeCity = city || "";
 
-    let match = historicalMosquesDB.find(m => m.country === countryCode && (city.includes(m.city) || m.city.includes(city)));
+    let match = null;
+    if (safeCountryCode && safeCity) {
+        match = historicalMosquesDB.find(m => m.country === safeCountryCode && (safeCity.includes(m.city) || m.city.includes(safeCity)));
+    }
+    if (!match && safeCountryCode) {
+        match = historicalMosquesDB.find(m => m.country === safeCountryCode);
+    }
     if (!match) {
-        match = historicalMosquesDB.find(m => m.country === countryCode) || historicalMosquesDB[0];
+        setHistoricalPlaceholder('تعذّر تحديد المنطقة من إحداثيات GPS');
+        return;
     }
 
     const currentYear = 2026;
@@ -609,6 +657,9 @@ function updateHistoricalCard(countryCode, city) {
     cityEl.innerText = `المدينة: ${match.city}`;
     descEl.innerText = match.desc;
     btn.href = `https://www.google.com/maps/search/?api=1&query=${match.lat},${match.lng}`;
+    btn.removeAttribute('aria-disabled');
+    btn.style.pointerEvents = '';
+    btn.style.opacity = '';
 }
 
 function initApp(lat, lng) {
@@ -618,7 +669,7 @@ function initApp(lat, lng) {
     const isManual = document.getElementById('pos-mode-select').value === 'manual';
     document.getElementById('gps-txt').innerText = isManual
         ? `موقع يدوي: ${lat.toFixed(4)}, ${lng.toFixed(4)}`
-        : `الموقع نشط ومربوط بدقة: ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+        : `GPS نشط: ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
     document.getElementById('global-maps-link').href = `https://www.google.com/maps/search/?api=1&query=mosque&center=${lat},${lng}`;
     
     // حساب وعرض اتجاه القبلة وحركة إبرة البوصلة
@@ -649,8 +700,12 @@ function initApp(lat, lng) {
         if (document.getElementById('pos-mode-select').value === 'manual') {
             const info = document.getElementById('manual-location-info');
             const parts = [geo.city, geo.state, geo.country].filter(Boolean);
-            info.textContent = '📍 ' + parts.join('، ');
-            info.style.display = 'block';
+            if (parts.length > 0) {
+                info.textContent = '📍 ' + parts.join('، ');
+                info.style.display = 'block';
+            } else {
+                info.style.display = 'none';
+            }
         }
     });
 }
@@ -667,7 +722,7 @@ window.onload = function() {
     function startGPS() {
         if (gpsTrackInterval) { clearInterval(gpsTrackInterval); gpsTrackInterval = null; }
         if (gpsWatchId !== null) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
-        latestGpsPos = null;
+        resetLocationView('في انتظار إحداثيات GPS دقيقة...');
 
         if (SIM_MODE) {
             document.getElementById('sim-panel').style.display = 'block';
@@ -731,7 +786,7 @@ window.onload = function() {
             const msgs = {
                 1: '⚠️ لم يتم منح إذن الموقع — يرجى السماح للمتصفح بالوصول إلى موقعك',
                 2: '⚠️ تعذّر تحديد الموقع — قد يكون GPS متوقفاً أو الإشارة ضعيفة',
-                3: '⚠️ انتهت مهلة GPS — يرجى التأكد من تفعيل GPS والمحاولة مجدداً',
+                3: '⚠️ انتهت مهلة GPS — لن يتم استخدام موقع افتراضي',
             };
             const msg = (err && msgs[err.code]) || '⚠️ فشل تحديد الموقع';
             document.getElementById('gps-txt').textContent = msg;
@@ -741,23 +796,33 @@ window.onload = function() {
 
         let initialized = false;
         gpsWatchId = navigator.geolocation.watchPosition(pos => {
+            const acc = pos.coords.accuracy;
+            if (!isAccurateGpsPosition(pos)) {
+                const accText = Number.isFinite(acc) ? `${Math.round(acc)}م` : 'غير معروفة';
+                const msg = `📡 تم تجاهل موقع غير دقيق (${accText}) — في انتظار GPS`;
+                document.getElementById('gps-txt').textContent = msg;
+                document.getElementById('gps-txt').style.color = '#d4a017';
+                if (!initialized) mosqueState('في انتظار إشارة GPS دقيقة...');
+                console.warn(`[GPS] تم تجاهل موقع غير دقيق: ${accText}`);
+                return;
+            }
             latestGpsPos = pos;
             if (!initialized) {
                 initialized = true;
                 initApp(pos.coords.latitude, pos.coords.longitude);
             }
-        }, () => {
-            // high-accuracy timed out or unavailable → fall back to low accuracy
-            if (gpsWatchId !== null) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
-            gpsWatchId = navigator.geolocation.watchPosition(pos => {
-                latestGpsPos = pos;
-                if (!initialized) { initialized = true; initApp(pos.coords.latitude, pos.coords.longitude); }
-            }, err => {
-                if (!initialized) { initialized = true; showGpsError(err); }
+        }, err => {
+            if (!initialized || (err && err.code === 1)) {
+                showGpsError(err);
+            } else {
+                console.warn('[GPS] خطأ مؤقت بعد تحديد الموقع:', err);
+            }
+            if (err && err.code === 1) {
+                initialized = true;
+                if (gpsWatchId !== null) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
                 if (gpsTrackInterval) { clearInterval(gpsTrackInterval); gpsTrackInterval = null; }
-            }, { enableHighAccuracy: false, timeout: 10000 });
-            // no default-location fallback here — wait for low-accuracy watch to resolve
-        }, { enableHighAccuracy: true, timeout: 8000 });
+            }
+        }, GPS_OPTIONS);
 
         gpsTrackInterval = setInterval(() => {
             if (document.getElementById('pos-mode-select').value !== 'auto') return;
@@ -769,7 +834,12 @@ window.onload = function() {
             const newLat = latestGpsPos.coords.latitude;
             const newLng = latestGpsPos.coords.longitude;
             const acc = latestGpsPos.coords.accuracy;
-            const dist = haversineKm(currentLat, currentLng, newLat, newLng);
+            if (!isAccurateGpsPosition(latestGpsPos)) {
+                console.warn(`[GPS ${ts}] تم تجاهل موقع غير دقيق: ${Number.isFinite(acc) ? acc.toFixed(0) + 'م' : 'غير معروف'}`);
+                return;
+            }
+            const hasCurrentFix = Number.isFinite(currentLat) && Number.isFinite(currentLng);
+            const dist = hasCurrentFix ? haversineKm(currentLat, currentLng, newLat, newLng) : Infinity;
             if (dist > 0.05) {
                 console.log(`[GPS ${ts}] ✅ موقع جديد — lat: ${newLat.toFixed(6)}, lng: ${newLng.toFixed(6)}, دقة: ${acc.toFixed(0)}م, تغيّر: ${(dist*1000).toFixed(0)}م`);
                 initApp(newLat, newLng);
@@ -797,7 +867,9 @@ window.onload = function() {
 
     posModeSelect.onchange = function() {
         if (this.value === 'manual') {
-            document.getElementById('manual-coords').value = `${currentLat.toFixed(6)}, ${currentLng.toFixed(6)}`;
+            document.getElementById('manual-coords').value = Number.isFinite(currentLat) && Number.isFinite(currentLng)
+                ? `${currentLat.toFixed(6)}, ${currentLng.toFixed(6)}`
+                : '';
             manualPanel.style.display = 'flex';
         } else {
             manualPanel.style.display = 'none';
