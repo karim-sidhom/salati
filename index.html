@@ -83,7 +83,7 @@
         .hist-desc { font-size: 11px; color: var(--muted); line-height: 1.5; margin-bottom: 12px; }
 
         .mosque-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 24px; }
-        .mosque-item { display: flex; align-items: center; gap: 12px; background: var(--card); border: 1px solid rgba(255,255,255,0.04); border-radius: 12px; padding: 12px 14px; transition: transform .15s, border-color .25s; }
+        .mosque-item { display: flex; flex-direction: column; gap: 0; background: var(--card); border: 1px solid rgba(255,255,255,0.04); border-radius: 12px; padding: 12px 14px; transition: transform .15s, border-color .25s; }
         .mosque-item:hover { transform: translateY(-1px); border-color: rgba(19,180,160,0.35); }
         .m-rank { flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%; background: var(--teal-dim); color: var(--teal); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; }
         .m-info { flex: 1; min-width: 0; }
@@ -96,6 +96,21 @@
         .btn-map:hover { background: rgba(19,180,160,0.25); }
         .btn-map.gold { background: var(--gold); color: #000; border: none; box-shadow: 0 2px 8px rgba(212,160,23,0.25); }
         .btn-map.gold:hover { background: #e6b520; }
+
+        /* Mawaqit prayer times block */
+        .mawaqit-times { margin-top: 8px; border-top: 1px solid rgba(19,180,160,0.12); padding-top: 7px; }
+        .mawaqit-label { font-size: 9.5px; color: var(--muted); margin-bottom: 5px; display: flex; align-items: center; gap: 5px; }
+        .mawaqit-label a { color: var(--teal); font-weight: 700; text-decoration: none; font-size: 9.5px; }
+        .mawaqit-label a:hover { text-decoration: underline; }
+        .mawaqit-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+        .mawaqit-prayer { text-align: center; }
+        .mawaqit-prayer-name { font-size: 9px; color: var(--muted); margin-bottom: 1px; }
+        .mawaqit-prayer-time { font-size: 11px; font-weight: 700; color: var(--teal); font-variant-numeric: tabular-nums; }
+        .mawaqit-prayer.current .mawaqit-prayer-time { color: var(--gold); }
+        .mawaqit-prayer.current .mawaqit-prayer-name { color: var(--gold); }
+        .mawaqit-loading { font-size: 10px; color: var(--muted); font-style: italic; }
+        .mawaqit-error { font-size: 10px; color: rgba(224,96,96,0.7); }
+        .mosque-item-top { display: flex; align-items: center; gap: 12px; width: 100%; }
         
         .qibla-wrap { text-align: center; margin-bottom: 24px; }
         .qibla-t { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
@@ -623,6 +638,114 @@ function mosqueState(msg) {
     list.appendChild(d);
 }
 
+// ─── Mawaqit integration ────────────────────────────────────────────────────
+
+const MAWAQIT_PRAYER_NAMES_AR = ['الفجر','الظهر','العصر','المغرب','العشاء'];
+const MAWAQIT_CACHE = new Map(); // key: `${lat.toFixed(3)},${lng.toFixed(3)}`
+
+async function fetchMawaqitForMosque(lat, lon, name) {
+    const cacheKey = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+    if (MAWAQIT_CACHE.has(cacheKey)) return MAWAQIT_CACHE.get(cacheKey);
+
+    // Build a search query: mosque name cleaned + city from reverse geocode
+    const cleanName = name
+        .replace(/جامع|مسجد|مساجد|mosque|masjid/gi, '')
+        .replace(/[^\p{L}\d\s]/gu, '')
+        .trim()
+        .slice(0, 40);
+
+    // Use the Mawaqit neighborhood search endpoint (publicly accessible)
+    const searchUrl = `https://mawaqit.net/api/2.0/mosque/search?lat=${lat}&lon=${lon}&word=${encodeURIComponent(cleanName)}&locale=ar&limit=5`;
+    const proxyUrl = `https://corsproxy.io/?url=${encodeURIComponent(searchUrl)}`;
+
+    try {
+        const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
+        if (!res.ok) throw new Error('bad status');
+        const data = await res.json();
+        // data is an array of mosques; pick the closest one (by proximity field or index 0)
+        const mosques = Array.isArray(data) ? data : (data.mosques || []);
+        if (!mosques.length) { MAWAQIT_CACHE.set(cacheKey, null); return null; }
+        // Find the one with minimum proximity to our lat/lon
+        let best = mosques[0];
+        let bestDist = Infinity;
+        for (const m of mosques) {
+            if (m.latitude && m.longitude) {
+                const d = haversineKm(lat, lon, parseFloat(m.latitude), parseFloat(m.longitude));
+                if (d < bestDist) { bestDist = d; best = m; }
+            }
+        }
+        // Only use if within 300m of the mosque
+        if (bestDist > 0.3) { MAWAQIT_CACHE.set(cacheKey, null); return null; }
+        const result = {
+            times: best.times || [],
+            slug: best.slug || '',
+            name: best.name || '',
+            url: best.slug ? `https://mawaqit.net/fr/${best.slug}` : '',
+        };
+        MAWAQIT_CACHE.set(cacheKey, result);
+        return result;
+    } catch (e) {
+        MAWAQIT_CACHE.set(cacheKey, null);
+        return null;
+    }
+}
+
+function renderMawaqitTimes(container, data) {
+    container.innerHTML = '';
+    if (!data || !data.times || !data.times.length) {
+        const err = document.createElement('div');
+        err.className = 'mawaqit-error';
+        err.textContent = 'لم يتم العثور على مواقيت في mawaqit.net';
+        container.appendChild(err);
+        return;
+    }
+    const label = document.createElement('div'); label.className = 'mawaqit-label';
+    const logoSpan = document.createElement('span'); logoSpan.textContent = '🕌 مواقيت mawaqit.net';
+    label.appendChild(logoSpan);
+    if (data.url) {
+        const link = document.createElement('a'); link.href = data.url; link.target = '_blank'; link.rel = 'noopener';
+        link.textContent = '← صفحة المسجد';
+        label.appendChild(link);
+    }
+    container.appendChild(label);
+
+    const grid = document.createElement('div'); grid.className = 'mawaqit-grid';
+    // times is array like ['04:30','13:00','16:30','19:45','21:15'] — 5 prayers
+    const prayerTimes = data.times.slice(0, 5);
+    // Determine current prayer
+    const now = new Date();
+    const nowMins = now.getHours() * 60 + now.getMinutes();
+    const timeMins = prayerTimes.map(t => {
+        const [h, m] = t.split(':').map(Number);
+        return h * 60 + m;
+    });
+    let activeIdx = -1;
+    for (let i = timeMins.length - 1; i >= 0; i--) {
+        if (nowMins >= timeMins[i]) { activeIdx = i; break; }
+    }
+
+    prayerTimes.forEach((t, i) => {
+        const cell = document.createElement('div');
+        cell.className = 'mawaqit-prayer' + (i === activeIdx ? ' current' : '');
+        const pn = document.createElement('div'); pn.className = 'mawaqit-prayer-name';
+        pn.textContent = MAWAQIT_PRAYER_NAMES_AR[i] || `ص${i+1}`;
+        const pt = document.createElement('div'); pt.className = 'mawaqit-prayer-time';
+        pt.textContent = t;
+        cell.append(pn, pt);
+        grid.appendChild(cell);
+    });
+    container.appendChild(grid);
+}
+
+async function attachMawaqitTimes(container, lat, lon, name) {
+    const mawaqitBlock = container.querySelector('.mawaqit-times');
+    if (!mawaqitBlock) return;
+    const data = await fetchMawaqitForMosque(lat, lon, name);
+    renderMawaqitTimes(mawaqitBlock, data);
+}
+
+// ─── Mosque list rendering ───────────────────────────────────────────────────
+
 function renderMosques(items, radiusKm, shown = 5, placeLabel = '', onExpand = null) {
     const placeSuffix = placeLabel ? ` - ${placeLabel}` : '';
     document.getElementById('zone-title').textContent = `أقرب المساجد إليكم${placeSuffix} (ضمن ${radiusKm} كم)`;
@@ -630,6 +753,9 @@ function renderMosques(items, radiusKm, shown = 5, placeLabel = '', onExpand = n
     list.innerHTML = '';
     items.slice(0, shown).forEach((m, i) => {
         const item = document.createElement('div'); item.className = 'mosque-item';
+
+        // Top row: rank + name/dist + map button
+        const top = document.createElement('div'); top.className = 'mosque-item-top';
         const rank = document.createElement('div'); rank.className = 'm-rank'; rank.textContent = i + 1;
         const info = document.createElement('div'); info.className = 'm-info';
         const nm = document.createElement('div'); nm.className = 'm-name'; nm.textContent = m.name;
@@ -638,8 +764,19 @@ function renderMosques(items, radiusKm, shown = 5, placeLabel = '', onExpand = n
         const btn = document.createElement('a'); btn.className = 'btn-map'; btn.target = '_blank'; btn.rel = 'noopener';
         btn.href = `https://www.google.com/maps/search/?api=1&query=${m.lat}%2C${m.lon}`;
         btn.textContent = 'الخريطة 📍';
-        item.append(rank, info, btn);
+        top.append(rank, info, btn);
+
+        // Mawaqit times block (bottom row, full width)
+        const mawaqitBlock = document.createElement('div'); mawaqitBlock.className = 'mawaqit-times';
+        const loading = document.createElement('div'); loading.className = 'mawaqit-loading';
+        loading.textContent = 'جاري جلب المواقيت من mawaqit.net...';
+        mawaqitBlock.appendChild(loading);
+
+        item.append(top, mawaqitBlock);
         list.appendChild(item);
+
+        // Async: fetch mawaqit times for this mosque
+        attachMawaqitTimes(item, m.lat, m.lon, m.name);
     });
     if (shown < items.length) {
         const rem = items.length - shown;
