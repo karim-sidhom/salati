@@ -437,7 +437,7 @@
         <label class="masiri-time-label">🕐 ساعة الانطلاق
             <input type="time" id="masiri-depart" class="masiri-input">
         </label>
-        <button id="masiri-calc" class="masiri-btn" disabled>🕌 احسب الصلاة على مسيري</button>
+        <button id="masiri-calc" class="masiri-btn">🕌 احسب الصلاة على مسيري</button>
         <div id="masiri-state" class="masiri-state" style="display:none;"></div>
         <div id="masiri-results" style="display:flex;flex-direction:column;gap:10px;"></div>
     </div>
@@ -2276,12 +2276,11 @@ async function masiriSearchDest() {
             btn.className = 'masiri-dest-option';
             btn.textContent = '📍 ' + p.display_name;
             btn.onclick = () => {
-                masiriDest = { lat: parseFloat(p.lat), lng: parseFloat(p.lon), label: p.display_name.split(',').slice(0, 2).join('،') };
+                masiriDest = { lat: parseFloat(p.lat), lng: parseFloat(p.lon), label: p.display_name.split(',').slice(0, 2).join('،'), query: q };
                 pick.style.display = 'none';
                 const chosen = document.getElementById('masiri-dest-chosen');
                 chosen.textContent = '🏁 الوجهة: ' + masiriDest.label;
                 chosen.style.display = 'block';
-                document.getElementById('masiri-calc').disabled = false;
             };
             pick.appendChild(btn);
         });
@@ -2377,7 +2376,27 @@ function masiriFmtHour(h) {
 }
 
 async function masiriCalc() {
-    if (!masiriDest) { masiriSetState('اختر وجهتك أولاً'); return; }
+    // Géocodage automatique : si l'utilisateur a tapé sa destination sans passer
+    // par بحث (ou l'a modifiée depuis), on prend le premier résultat directement.
+    const typed = document.getElementById('masiri-dest').value.trim();
+    if (!masiriDest || (typed && masiriDest.query !== typed)) {
+        if (!typed) { masiriSetState('اكتب وجهتك أولاً (مثال: صفاقس)'); return; }
+        masiriSetState('جاري تحديد الوجهة...');
+        try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(typed)}&limit=1&accept-language=ar`, { signal: AbortSignal.timeout(12000) });
+            if (!res.ok) throw new Error('bad status');
+            const places = await res.json();
+            if (!places.length) { masiriSetState('لم يتم العثور على هذه الوجهة — جرّب زر بحث لخيارات أدق'); return; }
+            const p = places[0];
+            masiriDest = { lat: parseFloat(p.lat), lng: parseFloat(p.lon), label: p.display_name.split(',').slice(0, 2).join('،'), query: typed };
+            const chosen = document.getElementById('masiri-dest-chosen');
+            chosen.textContent = '🏁 الوجهة: ' + masiriDest.label;
+            chosen.style.display = 'block';
+        } catch (e) {
+            masiriSetState('تعذّر تحديد الوجهة، تحقق من الاتصال');
+            return;
+        }
+    }
     if (!Number.isFinite(currentLat) || !Number.isFinite(currentLng)) {
         masiriSetState('⚠️ لم يُحدَّد موقع الانطلاق بعد — انتظر تثبيت GPS في أعلى الصفحة، أو استعمل الوضع اليدوي');
         return;
@@ -2423,14 +2442,20 @@ async function masiriCalc() {
 
     if (!during.length) {
         const next = prayersAtStart.find(p => p.time !== null && fixHour(p.time) > arriveH);
-        masiriSetState(next
-            ? `الحمد لله، لا صلاة خلال المسير — تصل قبل ${next.name} (${next.fmt})`
-            : 'لا صلاة متبقية اليوم خلال هذا المسير');
+        masiriSetState('');
+        const ok = document.createElement('div');
+        ok.className = 'masiri-result';
+        ok.innerHTML = `<div class="masiri-result-prayer">✅ لا صلاة خلال المسير</div>
+            <div class="masiri-result-line">${next
+                ? `الحمد لله، تصل إلى وجهتك قبل <b>${next.name}</b> (${next.fmt})`
+                : 'لا صلاة متبقية اليوم خلال هذا المسير'}</div>`;
+        results.appendChild(ok);
         return;
     }
 
     masiriSetState(`⏳ ${during.length} صلاة خلال المسير — جاري تحديد المساجد...`);
 
+    try {
     for (const prayer of during) {
         // 1ère estimation du point de passage à l'heure de la prière
         let frac = (fixHour(prayer.time) - departH) / route.durationH;
@@ -2451,13 +2476,19 @@ async function masiriCalc() {
             <div class="masiri-result-line">جاري تحديد موقعك عند الأذان...</div>`;
         results.appendChild(card);
 
-        const [geo, mosque] = await Promise.all([
+        // allSettled : si le geocoding OU Overpass échoue, l'autre continue et
+        // la carte affiche quand même ce qu'on a (plus jamais de blocage muet)
+        const [geoRes, mosqueRes] = await Promise.allSettled([
             reverseGeocode(pt.lat, pt.lng),
             masiriNearestMosque(pt.lat, pt.lng),
         ]);
         if (seq !== masiriCalcSeq) return;
+        const geo = geoRes.status === 'fulfilled' ? geoRes.value : null;
+        const mosque = mosqueRes.status === 'fulfilled' ? mosqueRes.value : null;
 
-        const placeName = formatGeoPlace(geo) || `${pt.lat.toFixed(4)}, ${pt.lng.toFixed(4)}`;
+        let placeName = null;
+        try { placeName = formatGeoPlace(geo); } catch (e) {}
+        if (!placeName) placeName = `${pt.lat.toFixed(4)}, ${pt.lng.toFixed(4)}`;
         let html = `<div class="masiri-result-prayer">🕌 ${prayer.name} — ${masiriFmtHour(prayerH)}</div>
             <div class="masiri-result-line">📍 عند الأذان ستكون قرب: <b>${placeName}</b></div>`;
         if (mosque) {
@@ -2472,6 +2503,10 @@ async function masiriCalc() {
         card.innerHTML = html;
     }
     masiriSetState('');
+    } catch (e) {
+        console.error('[masiri] erreur boucle prieres:', e);
+        masiriSetState('⚠️ حدث خطأ أثناء تحديد المساجد — أعد المحاولة');
+    }
 }
 
 function initMasiriSection() {
