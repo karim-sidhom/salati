@@ -420,18 +420,18 @@
         <span data-i18n="sec_historical">أقرب جامع تاريخي موثق</span>
     </div>
     <div class="historical-card" id="historical-card">
-        <div class="hist-title" id="hist-name" data-i18n="hist_name_loading">جاري رصد المعالم التاريخية...</div>
+        <div class="hist-title" id="hist-name">جاري رصد المعالم التاريخية...</div>
         <div class="hist-meta">
-            <span id="hist-age" style="color: var(--gold); font-weight:600;" data-i18n="hist_age_default">العمر: --</span>
-            <span id="hist-city" style="color: var(--muted);" data-i18n="hist_city_default">المدينة: --</span>
+            <span id="hist-age" style="color: var(--gold); font-weight:600;">العمر: --</span>
+            <span id="hist-city" style="color: var(--muted);">المدينة: --</span>
         </div>
-        <div class="hist-desc" id="hist-desc" data-i18n="hist_desc_default">سيظهر هنا أقرب مسجد تاريخي موثق من قاعدة البيانات.</div>
+        <div class="hist-desc" id="hist-desc">سيظهر هنا أقرب مسجد تاريخي موثق من قاعدة البيانات.</div>
         <a id="hist-map-btn" href="#" target="_blank" class="btn-map gold" style="display:inline-block; text-align:center;" data-i18n="hist_map_btn">🗺️ وجهني لأقرب جامع تاريخي</a>
     </div>
 
     <div class="sec-head">
         <span>🕌</span>
-        <span id="zone-title" data-i18n="sec_mosques">أقرب المساجد إليكم</span>
+        <span id="zone-title">أقرب المساجد إليكم</span>
     </div>
     <div class="mosque-list" id="mosque-list"></div>
 
@@ -570,6 +570,11 @@ const I18N = {
         bukhari_reference: 'صحيح البخاري — حديث رقم {n}',
         bukhari_hadith_num: 'حديث {n}',
         bukhari_book_option: '{n}. كتاب {name}',
+        hist_waiting_gps: 'في انتظار تحديد GPS...',
+        hist_no_coords: 'لا توجد إحداثيات مؤكدة للمساجد التاريخية',
+        hist_age_line: 'العمر: {age} سنة',
+        hist_city_line: '{city} · {dist} كم',
+        zone_title_with_radius: 'أقرب المساجد إليكم{suffix} (ضمن {radius} كم)',
     },
     fr: {
         app_title: 'Horaires de prière mondiaux',
@@ -649,6 +654,11 @@ const I18N = {
         bukhari_reference: 'Sahih al-Boukhari — hadith n° {n}',
         bukhari_hadith_num: 'Hadith {n}',
         bukhari_book_option: '{n}. Livre : {name}',
+        hist_waiting_gps: 'En attente de la position GPS...',
+        hist_no_coords: 'Aucune coordonnée confirmée pour les mosquées historiques',
+        hist_age_line: 'Âge : {age} ans',
+        hist_city_line: '{city} · {dist} km',
+        zone_title_with_radius: 'Mosquées les plus proches{suffix} (dans un rayon de {radius} km)',
     },
     en: {
         app_title: 'Global Prayer Times',
@@ -728,6 +738,11 @@ const I18N = {
         bukhari_reference: 'Sahih al-Bukhari — hadith no. {n}',
         bukhari_hadith_num: 'Hadith {n}',
         bukhari_book_option: '{n}. Book: {name}',
+        hist_waiting_gps: 'Waiting for GPS location...',
+        hist_no_coords: 'No confirmed coordinates for historic mosques',
+        hist_age_line: 'Age: {age} years',
+        hist_city_line: '{city} · {dist} km',
+        zone_title_with_radius: 'Mosques near you{suffix} (within {radius} km)',
     },
 };
 
@@ -809,6 +824,11 @@ function applyTranslations() {
     // rechargés dans la nouvelle langue depuis leurs éditions respectives.
     if (typeof refreshQuranForLanguage === 'function') refreshQuranForLanguage();
     if (typeof refreshBukhariForLanguage === 'function') refreshBukhariForLanguage();
+    // 🕌 Correctif : la carte "mosquée historique" et le titre de la liste des
+    // mosquées ne doivent PAS être écrasés par un texte générique quand la
+    // langue change — on les ré-affiche à partir des dernières données trouvées.
+    if (typeof refreshHistoricalCardForLanguage === 'function') refreshHistoricalCardForLanguage();
+    if (typeof refreshZoneTitleForLanguage === 'function') refreshZoneTitleForLanguage();
 }
 
 function setLanguage(lang, isUserChoice) {
@@ -1930,7 +1950,8 @@ function resolveIqamaTime(adhanT, rawIqama) {
 
 function renderMosques(items, radiusKm, shown = 5, placeLabel = '', onExpand = null, centerLat = null, centerLon = null) {
     const placeSuffix = placeLabel ? ` - ${placeLabel}` : '';
-    document.getElementById('zone-title').textContent = `أقرب المساجد إليكم${placeSuffix} (ضمن ${radiusKm} كم)`;
+    lastZoneTitleParams = { suffix: placeSuffix, radius: radiusKm };
+    document.getElementById('zone-title').textContent = t('zone_title_with_radius', { suffix: placeSuffix, radius: radiusKm });
     const list = document.getElementById('mosque-list');
     list.innerHTML = '';
 
@@ -1982,12 +2003,18 @@ function renderMosques(items, radiusKm, shown = 5, placeLabel = '', onExpand = n
     }
 }
 
-function setHistoricalPlaceholder(message) {
+let lastHistoricalMatch = null;
+let lastHistoricalPlaceholderKey = null;
+let lastZoneTitleParams = null;
+
+function setHistoricalPlaceholder(msgKey) {
+    lastHistoricalMatch = null;
+    lastHistoricalPlaceholderKey = msgKey;
     const btn = document.getElementById('hist-map-btn');
-    document.getElementById('hist-name').innerText = message;
-    document.getElementById('hist-age').innerText = 'العمر: --';
-    document.getElementById('hist-city').innerText = 'المدينة: --';
-    document.getElementById('hist-desc').innerText = 'سيظهر هنا أقرب مسجد تاريخي موثق بعد الحصول على إحداثيات GPS دقيقة.';
+    document.getElementById('hist-name').innerText = t(msgKey);
+    document.getElementById('hist-age').innerText = t('hist_age_line', { age: '--' });
+    document.getElementById('hist-city').innerText = t('hist_city_line', { city: '--', dist: '--' });
+    document.getElementById('hist-desc').innerText = t('hist_desc_default');
     btn.removeAttribute('href');
     btn.setAttribute('aria-disabled', 'true');
     btn.style.pointerEvents = 'none';
@@ -2010,8 +2037,9 @@ function resetLocationView(message) {
     document.getElementById('global-maps-link').href = '#';
     document.getElementById('qibla-deg').innerText = '--°';
     document.getElementById('needle').style.transform = 'translateX(-50%) rotate(0deg)';
-    document.getElementById('zone-title').textContent = 'أقرب المساجد إليكم';
-    setHistoricalPlaceholder('في انتظار تحديد GPS...');
+    lastZoneTitleParams = null;
+    document.getElementById('zone-title').textContent = t('sec_mosques');
+    setHistoricalPlaceholder('hist_waiting_gps');
     resetGpsMonitor(message);
     mosqueState(message);
 }
@@ -2354,18 +2382,47 @@ function updateHistoricalCard(lat, lng) {
         .sort((a, b) => a.dist - b.dist)[0];
 
     if (!match) {
-        setHistoricalPlaceholder('لا توجد إحداثيات مؤكدة للمساجد التاريخية');
+        setHistoricalPlaceholder('hist_no_coords');
         return;
     }
 
+    lastHistoricalMatch = match;
+    lastHistoricalPlaceholderKey = null;
     nameEl.innerText = match.name;
-    ageEl.innerText = `العمر: ${match.estimatedAgeYearsIn2026} سنة`;
-    cityEl.innerText = `${match.city} · ${match.dist.toFixed(1)} كم`;
+    ageEl.innerText = t('hist_age_line', { age: match.estimatedAgeYearsIn2026 });
+    cityEl.innerText = t('hist_city_line', { city: match.city, dist: match.dist.toFixed(1) });
     descEl.innerText = match.description;
     btn.href = `https://www.google.com/maps/search/?api=1&query=${match.latitude},${match.longitude}`;
     btn.removeAttribute('aria-disabled');
     btn.style.pointerEvents = '';
     btn.style.opacity = '';
+}
+
+// Appelée quand la langue change : ré-affiche l'âge/la ville dans la nouvelle
+// langue SANS refaire le calcul de distance — à partir de la dernière mosquée
+// historique trouvée, ou du dernier message d'attente affiché.
+function refreshHistoricalCardForLanguage() {
+    if (!document.getElementById('hist-name')) return;
+    if (lastHistoricalMatch) {
+        const match = lastHistoricalMatch;
+        document.getElementById('hist-age').innerText = t('hist_age_line', { age: match.estimatedAgeYearsIn2026 });
+        document.getElementById('hist-city').innerText = t('hist_city_line', { city: match.city, dist: match.dist.toFixed(1) });
+    } else if (lastHistoricalPlaceholderKey) {
+        setHistoricalPlaceholder(lastHistoricalPlaceholderKey);
+    }
+}
+
+// Idem pour le titre "أقرب المساجد إليكم (ضمن X كم)" : ré-affiché dans la
+// nouvelle langue à partir des derniers paramètres connus (ou du libellé par
+// défaut si aucune recherche n'a encore abouti).
+function refreshZoneTitleForLanguage() {
+    const el = document.getElementById('zone-title');
+    if (!el) return;
+    if (lastZoneTitleParams) {
+        el.textContent = t('zone_title_with_radius', lastZoneTitleParams);
+    } else {
+        el.textContent = t('sec_mosques');
+    }
 }
 
 function initApp(lat, lng) {
