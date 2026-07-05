@@ -2757,6 +2757,9 @@ window.onload = function() {
 
     posModeSelect.onchange = function() {
         if (this.value === 'manual') {
+            // نوقف تعقب GPS فوراً حتى لا تُستقبل قراءة GPS جديدة وتلغي الموقع اليدوي
+            if (gpsTrackInterval) { clearInterval(gpsTrackInterval); gpsTrackInterval = null; }
+            if (gpsWatchId !== null) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
             const hasGps = Number.isFinite(currentLat) && Number.isFinite(currentLng);
             const centerLat = hasGps ? currentLat : 36.8065; // تونس العاصمة كموقع افتراضي
             const centerLng = hasGps ? currentLng : 10.1815;
