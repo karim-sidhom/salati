@@ -3,13 +3,15 @@
 // Stratégie : cache "app shell" (HTML/manifest/icônes) + réseau d'abord pour les APIs (prières/mosquées),
 // avec repli sur le cache si hors-ligne.
 
-const CACHE_NAME = 'mawaqit-shell-v1';
+const CACHE_NAME = 'mawaqit-shell-v2';
 const APP_SHELL = [
   './',
   './index.html',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
+  './icon-512-maskable.png',
+  './apple-touch-icon.png',
 ];
 
 self.addEventListener('install', (event) => {
