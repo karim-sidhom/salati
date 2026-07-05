@@ -1,16 +1,16 @@
 {
-  "name": "مواقيت الصلاة والمساجد",
+  "name": "مواقيت الصلاة العالمية",
   "short_name": "مواقيت",
-  "description": "مواقيت الصلاة وأقرب المساجد باستخدام GPS",
-  "start_url": "./",
+  "description": "مواقيت الصلاة، القبلة، المساجد التاريخية والمزيد — وقف خيري لروح الحاج حمودة سيدهم",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "theme_color": "#0b1e1a",
-  "background_color": "#0b1e1a",
-  "lang": "ar",
-  "dir": "rtl",
-  "categories": ["lifestyle", "utilities"],
+  "background_color": "#020b2e",
+  "theme_color": "#020b2e",
+  "categories": ["lifestyle", "utilities", "religion"],
   "icons": [
     {
       "src": "icon-192.png",
@@ -22,18 +22,12 @@
       "src": "icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
       "purpose": "any"
     },
     {
-      "src": "icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
       "purpose": "maskable"
     }
   ]
