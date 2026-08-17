@@ -212,6 +212,10 @@
         .quran-text .surah-head { display: block; text-align: center; color: var(--gold); font-size: 15px; font-weight: 700; border-top: 1px solid rgba(255,215,0,0.2); border-bottom: 1px solid rgba(255,215,0,0.2); padding: 6px 0; margin: 10px 0; }
         .quran-text .ayah-num { color: var(--teal); font-size: 13px; margin: 0 3px; }
         .quran-text .ayah-translation { display: block; direction: ltr; text-align: left; font-family: 'Tajawal', 'Cairo', sans-serif; font-size: 13px; line-height: 1.6; color: var(--muted); margin: 2px 0 14px; padding-inline-start: 4px; border-inline-start: 2px solid rgba(255,215,0,0.25); }
+        .quran-text .ayah-tafsir { display: block; direction: rtl; text-align: right; font-family: 'Tajawal', 'Cairo', sans-serif; font-size: 13px; line-height: 1.7; color: var(--teal); margin: 2px 0 14px; padding-inline-end: 4px; border-inline-end: 2px solid rgba(255,229,102,0.35); background: var(--teal-dim); border-radius: 6px; padding: 8px 10px; }
+        .quran-text .ayah-tafsir b { color: var(--gold); }
+        .quran-tafsir-btn { flex-shrink: 0; padding: 8px 12px; border-radius: 9px; background: var(--teal-dim); color: var(--teal); border: 1px solid rgba(255,229,102,0.3); font-family: 'Tajawal', 'Cairo', sans-serif; font-size: 12px; font-weight: 700; cursor: pointer; }
+        .quran-tafsir-btn.active { background: var(--gold-dim); color: var(--gold); border-color: rgba(255,215,0,0.4); }
         .quran-state { font-size: 11px; color: var(--muted); text-align: center; padding: 8px; }
         .quran-done-btn { width: 100%; padding: 10px; border-radius: 10px; background: var(--teal-dim); color: var(--teal); border: 1px solid rgba(255,229,102,0.3); font-family: 'Tajawal', 'Cairo', sans-serif; font-size: 12px; font-weight: 700; cursor: pointer; margin-bottom: 8px; }
         .quran-done-btn.done { background: var(--gold-dim); color: var(--gold); border-color: rgba(255,215,0,0.4); cursor: default; }
@@ -392,6 +396,7 @@
         </div>
         <div class="quran-audio-row">
             <button id="quran-play" class="quran-play-btn" data-i18n="quran_play_btn">▶️ استماع (العفاسي)</button>
+            <button id="quran-tafsir-toggle" class="quran-tafsir-btn">📘 التفسير الميسر</button>
             <span id="quran-audio-status" class="quran-audio-status"></span>
         </div>
         <div id="quran-text" class="quran-text"></div>
@@ -563,6 +568,10 @@ const I18N = {
         quran_progress_complete: ' — ختمة مباركة، تقبل الله 🤲',
         quran_done_marked: '✓ الحزب {n} مقروء ({date})',
         quran_translation_label: 'الترجمة',
+        quran_tafsir_btn_off: '📘 التفسير الميسر',
+        quran_tafsir_btn_on: '📘 إخفاء التفسير',
+        quran_tafsir_label: 'التفسير الميسر:',
+        quran_tafsir_error: 'تعذّر تحميل التفسير لهذا الحزب',
         bukhari_loading_book: 'جاري تحميل كتاب {name}...',
         bukhari_count_hadiths: '📜 {n} حديثاً في هذا الكتاب',
         bukhari_load_error: 'تعذّر تحميل الكتاب، تحقق من الاتصال ثم أعد المحاولة',
@@ -647,6 +656,10 @@ const I18N = {
         quran_progress_complete: ' — Coran achevé, qu\u2019Allah l\u2019accepte 🤲',
         quran_done_marked: '✓ Hizb {n} lu ({date})',
         quran_translation_label: 'Traduction',
+        quran_tafsir_btn_off: '📘 Tafsir Al-Muyassar',
+        quran_tafsir_btn_on: '📘 Masquer le tafsir',
+        quran_tafsir_label: 'Tafsir Al-Muyassar :',
+        quran_tafsir_error: 'Impossible de charger le tafsir pour ce hizb',
         bukhari_loading_book: 'Chargement du livre {name}...',
         bukhari_count_hadiths: '📜 {n} hadiths dans ce livre',
         bukhari_load_error: 'Impossible de charger le livre, vérifiez la connexion puis réessayez',
@@ -731,6 +744,10 @@ const I18N = {
         quran_progress_complete: ' — Qur\u2019an completed, may Allah accept it 🤲',
         quran_done_marked: '✓ Hizb {n} read ({date})',
         quran_translation_label: 'Translation',
+        quran_tafsir_btn_off: '📘 Tafsir Al-Muyassar',
+        quran_tafsir_btn_on: '📘 Hide tafsir',
+        quran_tafsir_label: 'Tafsir Al-Muyassar:',
+        quran_tafsir_error: 'Could not load the tafsir for this hizb',
         bukhari_loading_book: 'Loading book {name}...',
         bukhari_count_hadiths: '📜 {n} hadiths in this book',
         bukhari_load_error: 'Could not load the book, check your connection and try again',
@@ -2546,7 +2563,12 @@ async function quranFetchHizbEdition(hizb, edition) {
 // texte arabe (mushaf, quran-uthmani) est TOUJOURS affiché en premier — la
 // traduction n'est qu'une aide de compréhension affichée en plus, jamais à sa place.
 const QURAN_TRANSLATION_EDITION = { fr: 'fr.hamidullah', en: 'en.sahih' };
+// Tafsir Al-Muyassar : tafsir arabe simplifié et largement reconnu (Complexe
+// du Roi Fahd). Affiché en plus du texte et de la traduction, jamais à leur
+// place, et seulement si l'utilisateur active le bouton dédié.
+const QURAN_TAFSIR_EDITION = 'ar.muyassar';
 let quranTextIsOpen = false;
+let quranShowTafsir = localStorage.getItem('quran_tafsir_on') === '1';
 
 async function quranLoadText() {
     const hizb = quranCurrentHizb;
@@ -2557,9 +2579,10 @@ async function quranLoadText() {
     quranSetState(t('quran_loading_hizb', { n: hizb }));
     const translationEdition = QURAN_TRANSLATION_EDITION[currentLang];
     try {
-        const [ayahs, translations] = await Promise.all([
+        const [ayahs, translations, tafsirs] = await Promise.all([
             quranFetchHizbEdition(hizb, 'quran-uthmani'),
             translationEdition ? quranFetchHizbEdition(hizb, translationEdition).catch(() => null) : Promise.resolve(null),
+            quranShowTafsir ? quranFetchHizbEdition(hizb, QURAN_TAFSIR_EDITION).catch(() => null) : Promise.resolve(null),
         ]);
         if (hizb !== quranCurrentHizb) return;
         box.innerHTML = '';
@@ -2585,11 +2608,31 @@ async function quranLoadText() {
                 trEl.textContent = tr.text;
                 box.appendChild(trEl);
             }
+            const tf = tafsirs && tafsirs[i];
+            if (tf && tf.text) {
+                const tfEl = document.createElement('div');
+                tfEl.className = 'ayah-tafsir';
+                const label = document.createElement('b');
+                label.textContent = t('quran_tafsir_label') + ' ';
+                tfEl.appendChild(label);
+                tfEl.appendChild(document.createTextNode(tf.text));
+                box.appendChild(tfEl);
+            }
         });
-        quranSetState('');
+        if (quranShowTafsir && !tafsirs) quranSetState(t('quran_tafsir_error'));
+        else quranSetState('');
     } catch (e) {
         quranSetState(t('quran_load_error'));
     }
+}
+
+function quranToggleTafsir() {
+    quranShowTafsir = !quranShowTafsir;
+    localStorage.setItem('quran_tafsir_on', quranShowTafsir ? '1' : '0');
+    const btn = document.getElementById('quran-tafsir-toggle');
+    btn.classList.toggle('active', quranShowTafsir);
+    btn.textContent = t(quranShowTafsir ? 'quran_tafsir_btn_on' : 'quran_tafsir_btn_off');
+    if (quranTextIsOpen) quranLoadText();
 }
 
 function quranStopAudio() {
@@ -2668,6 +2711,10 @@ function initQuranSection() {
     document.getElementById('quran-prev').onclick = () => quranSelectHizb(quranCurrentHizb - 1);
     document.getElementById('quran-next').onclick = () => quranSelectHizb(quranCurrentHizb + 1);
     document.getElementById('quran-goto-today').onclick = () => quranSelectHizb(today);
+    const tafsirBtn = document.getElementById('quran-tafsir-toggle');
+    tafsirBtn.classList.toggle('active', quranShowTafsir);
+    tafsirBtn.textContent = t(quranShowTafsir ? 'quran_tafsir_btn_on' : 'quran_tafsir_btn_off');
+    tafsirBtn.onclick = quranToggleTafsir;
     document.getElementById('quran-load').onclick = quranLoadText;
     document.getElementById('quran-play').onclick = quranToggleAudio;
     document.getElementById('quran-done').onclick = () => {
@@ -2688,6 +2735,7 @@ function refreshQuranForLanguage() {
     populateQuranHizbSelect();
     quranUpdateProgress();
     if (!quranAudioPlaying) document.getElementById('quran-play').textContent = t('quran_play_btn');
+    document.getElementById('quran-tafsir-toggle').textContent = t(quranShowTafsir ? 'quran_tafsir_btn_on' : 'quran_tafsir_btn_off');
     if (quranTextIsOpen) {
         quranLoadText();
     } else {
