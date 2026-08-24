@@ -2046,6 +2046,10 @@ const TAKBIR_PATTERNS = [/الله\s*اكبر/gi, /الله\s*أكبر/gi, /alla
 // مرساة تصحيح: "الله لمن حمده" تُقال بعد القيام من الركوع مباشرة (بين تكبيرة
 // الركوع وتكبيرة السجود) — تُستخدم لتصحيح العدّ إذا فاتت تكبيرة الركوع الأولى.
 const SAMIA_PATTERNS = [/الله\s*لمن\s*حمده/gi, /سمع\s*الله\s*لمن\s*حمده/gi];
+// مرساة التسليم: "السلام عليكم" تُقال عند الخروج من الصلاة (الفرض). لا تُحتسب
+// أي ركعة نافلة إلا بعد سماع هذا التسليم — قبله يتوقف العدّ تماماً بمجرد
+// اكتمال عدد ركعات الفرض.
+const SALAM_PATTERNS = [/السلام\s*عليكم/gi, /سلام\s*عليكم/gi];
 // عند عدم توفر وقت إقامة حقيقي من مسجد مسجّل (لا بيانات mawaqit قريبة)، نعتمد
 // وقت الأذان + هامش تقريبي بدل اعتبار الأذان نفسه بداية الفرض مباشرة
 const RAKAT_MIC_ASKED_KEY = 'rakat_mic_permission_asked'; // مرة واحدة فقط طوال عمر التطبيق
@@ -2059,8 +2063,8 @@ let rakatState = {
     inFardhWindow: false,
     hasRealIqama: false,
     takbirInRakat: 0, // عدد التكبيرات المسموعة ضمن الركعة الجارية (0..4، عند الوصول لـ5 تكتمل الركعة)
+    naflUnlocked: false, // يصبح true فقط بعد سماع تسليم فعلي لاحقاً لاكتمال الفرض
     autoStartedKey: null, // معرّف الصلاة (id_تاريخ) التي بدأ الاستماع من أجلها بالفعل
-    lastTakbirTs: 0,
     recognition: null,
     contextInterval: null,
 };
@@ -2119,6 +2123,24 @@ function checkSamiaAnchor(text) {
         setRakatStatus('🔄 تم تصحيح العدّ تلقائياً بالاعتماد على "الله لمن حمده"', false);
         updateRakatUI();
     }
+}
+
+// مرساة التسليم: عند سماع "السلام عليكم" بعد اكتمال الفرض، نعتبر أن الصلاة
+// انتهت فعلياً — يُفتح عدّ النافلة البعدية من صفر جديد (لا نستكمل عدّ التكبير
+// الجاري، فالنافلة تبدأ بتكبيرة إحرام جديدة تماماً).
+function checkSalamAnchor(text) {
+    if (!text || !rakatState.active) return;
+    if (rakatState.fardhCount < rakatState.targetRakat) return; // الفرض لم يكتمل بعد
+    if (rakatState.naflUnlocked) return; // مفعّل أصلاً
+    let found = false;
+    for (const re of SALAM_PATTERNS) {
+        if (re.test(text)) { found = true; break; }
+    }
+    if (!found) return;
+    rakatState.naflUnlocked = true;
+    rakatState.takbirInRakat = 0;
+    setRakatStatus('✓ تسليم مسموع — بدأ عدّ النافلة البعدية', false);
+    updateRakatUI();
 }
 
 // يجلب أوقات الأذان والإقامة لأقرب مسجد مسجّل على mawaqit.net من الموقع الحالي
@@ -2183,6 +2205,7 @@ async function refreshRakatContext() {
         rakatState.fardhCount = 0;
         rakatState.naflCount = 0;
         rakatState.takbirInRakat = 0;
+        rakatState.naflUnlocked = false;
     }
     rakatState.prayerId = prayerId;
     rakatState.targetRakat = RAKAT_COUNTS[prayerId];
@@ -2227,16 +2250,21 @@ function setRakatStatus(msg, isError) {
 // التشهد تُحسب مثل أي تكبيرة أخرى — تبسيطاً للعدّ).
 function advanceOneRakat() {
     // مع وجود إقامة حقيقية: التوقيت هو الفيصل بين النافلة والفرض (قبل الإقامة =
-    // نافلة، بعدها = فرض حتى تكتمل العدد، وما بعد ذلك يعود نافلة). بدون إقامة
-    // حقيقية معروفة: العدد وحده يحدّد.
+    // نافلة قبلية، بعدها = فرض حتى تكتمل العدد). بدون إقامة حقيقية معروفة:
+    // العدد وحده يحدّد.
+    const fardhComplete = rakatState.fardhCount >= rakatState.targetRakat;
     const isFardh = rakatState.hasRealIqama
-        ? (rakatState.inFardhWindow && rakatState.fardhCount < rakatState.targetRakat)
-        : (rakatState.fardhCount < rakatState.targetRakat);
+        ? (rakatState.inFardhWindow && !fardhComplete)
+        : (!fardhComplete);
     if (isFardh) {
         rakatState.fardhCount++;
-    } else {
-        rakatState.naflCount++;
+        return;
     }
+    // الفرض مكتمل: لا نافلة بعدية تُحتسب إلا بعد تسليم فعلي مسموع
+    // (checkSalamAnchor). قبل ذلك، أي تكبير إضافي (صدى، خطأ تعرف صوتي...)
+    // يُتجاهل تماماً. أما النافلة القبلية (قبل الإقامة) فتبقى تُحتسب بحرية.
+    if (fardhComplete && !rakatState.naflUnlocked) return;
+    rakatState.naflCount++;
 }
 
 function registerTakbir() {
@@ -2250,9 +2278,6 @@ function registerTakbir() {
 
 function handleTakbir(count) {
     for (let i = 0; i < count; i++) {
-        const now = Date.now();
-        if (now - rakatState.lastTakbirTs < 700) continue;
-        rakatState.lastTakbirTs = now;
         registerTakbir();
     }
 }
@@ -2281,6 +2306,7 @@ function startOneRecognitionCycle() {
             const n = countTakbirs(transcript);
             if (n > 0) handleTakbir(n);
             checkSamiaAnchor(transcript);
+            checkSalamAnchor(transcript);
         }
     };
     rec.onerror = function (e) {
@@ -2329,7 +2355,7 @@ function handleMotionEvent(event) {
     if (!a || a.x === null) return;
     const magnitude = Math.sqrt((a.x || 0) ** 2 + (a.y || 0) ** 2 + (a.z || 0) ** 2);
     if (magnitude > MOTION_PEAK_THRESHOLD) {
-        handleTakbir(1); // نفس دالة التكبير الصوتي — الحماية الزمنية (700ms) تمنع التكرار المزدوج
+        handleTakbir(1); // نفس دالة التكبير الصوتي
     }
 }
 
@@ -2348,6 +2374,7 @@ function stopMotionDetection() {
 // يشغّل الاستماع فعلياً (تُستدعى تلقائياً عند دخول وقت الإقامة، أو يدوياً بالزر)
 function startRakatListening() {
     rakatState.takbirInRakat = 0;
+    rakatState.naflUnlocked = false;
     rakatState.overlayDismissed = false;
     if (typeof quranAudioPlaying !== 'undefined' && quranAudioPlaying) quranStopAudio(); // لا نزعج المصلين بصوت القرآن أثناء الصلاة
     const okSpeech = startRakatSpeech();
