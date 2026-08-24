@@ -196,12 +196,19 @@
         .wake-timer { font-size: 64px; font-weight: 700; color: var(--gold); letter-spacing: 6px; font-variant-numeric: tabular-nums; text-shadow: 0 0 30px rgba(255,215,0,0.35); }
         .wake-sub { font-size: 12px; color: rgba(122,158,150,0.55); }
         .wake-exit-hint { position: absolute; bottom: 30px; font-size: 11px; color: rgba(122,158,150,0.4); }
-        .salat-overlay { display: none; position: fixed; inset: 0; background: #020604; z-index: 9998; flex-direction: column; justify-content: center; align-items: center; gap: 16px; text-align: center; padding: 24px; cursor: pointer; }
+        .salat-overlay {
+            display: none; position: fixed; inset: 0;
+            background: radial-gradient(ellipse 90% 60% at 50% 15%, rgba(255,215,0,0.12) 0%, transparent 65%), linear-gradient(180deg, #020b2e 0%, #010716 100%);
+            box-shadow: inset 0 0 0 1px rgba(255,215,0,0.22), inset 0 0 80px rgba(255,215,0,0.06);
+            z-index: 9998; flex-direction: column; justify-content: center; align-items: center; gap: 16px; text-align: center; padding: 24px; cursor: pointer;
+        }
         .salat-overlay.visible { display: flex; }
-        .salat-mosque-name { font-family: 'Amiri', serif; font-size: 24px; color: var(--gold); opacity: 0.9; }
-        .salat-prayer-name { font-size: 20px; color: rgba(122,158,150,0.85); }
-        .salat-rakat-count { font-size: 56px; font-weight: 700; color: var(--gold); letter-spacing: 4px; font-variant-numeric: tabular-nums; text-shadow: 0 0 30px rgba(255,215,0,0.35); }
-        .salat-status-line { font-size: 13px; color: rgba(122,158,150,0.6); max-width: 320px; }
+        .salat-overlay::before { content: ''; width: 70px; height: 2px; background: linear-gradient(90deg, transparent, var(--gold), transparent); margin-bottom: 4px; order: 0; }
+        .salat-overlay::after { content: ''; width: 70px; height: 2px; background: linear-gradient(90deg, transparent, var(--gold), transparent); margin-top: 4px; order: 5; }
+        .salat-mosque-name { font-family: 'Amiri', serif; font-size: 20px; color: var(--gold); opacity: 0.9; order: 4; }
+        .salat-prayer-name { font-size: 22px; color: var(--gold); font-family: 'Amiri', serif; font-weight: 700; order: 1; }
+        .salat-rakat-count { font-size: 64px; font-weight: 700; color: var(--gold); letter-spacing: 4px; font-variant-numeric: tabular-nums; text-shadow: 0 0 30px rgba(255,215,0,0.4); order: 2; }
+        .salat-status-line { font-size: 13px; color: rgba(122,158,150,0.6); max-width: 320px; order: 6; }
 
         /* عداد الركعات: تكبير صوتي + وضعية الهاتف */
         .rakat-card { background: var(--deep); border: 1px solid rgba(255,215,0,0.18); border-radius: 16px; padding: 16px; margin-bottom: 20px; }
@@ -392,11 +399,11 @@
     </div>
 
     <div id="salat-overlay" class="salat-overlay">
-        <div class="salat-mosque-name" id="salat-mosque-name">--</div>
         <div class="salat-prayer-name" id="salat-prayer-name">--</div>
         <div class="salat-rakat-count" id="salat-rakat-count">0 / --</div>
+        <div class="salat-mosque-name" id="salat-mosque-name">--</div>
         <div class="salat-status-line" id="salat-status-line"></div>
-        <div class="wake-exit-hint" data-i18n="wake_exit_hint">المس الشاشة للخروج</div>
+        <div class="wake-exit-hint" data-i18n="wake_exit_hint" style="order: 7;">المس الشاشة للخروج</div>
     </div>
 
     <div class="rakat-card">
@@ -2052,8 +2059,6 @@ let rakatState = {
     inFardhWindow: false,
     hasRealIqama: false,
     takbirInRakat: 0, // عدد التكبيرات المسموعة ضمن الركعة الجارية (0..4، عند الوصول لـ5 تكتمل الركعة)
-    ihramSkipped: false, // تجاهل أول تكبيرة (تكبيرة الإحرام) عند بدء الجلسة
-    awaitingStandTakbir: false, // تكبيرة القيام من التشهد الأول بعد الركعة الثانية (في الصلاة الثلاثية/الرباعية) — تُستهلك بلا احتساب
     autoStartedKey: null, // معرّف الصلاة (id_تاريخ) التي بدأ الاستماع من أجلها بالفعل
     lastTakbirTs: 0,
     recognition: null,
@@ -2109,7 +2114,7 @@ function checkSamiaAnchor(text) {
         if (re.test(text)) { found = true; break; }
     }
     if (!found) return;
-    if (rakatState.ihramSkipped && rakatState.takbirInRakat === 0) {
+    if (rakatState.takbirInRakat === 0) {
         rakatState.takbirInRakat = 1;
         setRakatStatus('🔄 تم تصحيح العدّ تلقائياً بالاعتماد على "الله لمن حمده"', false);
         updateRakatUI();
@@ -2118,6 +2123,9 @@ function checkSamiaAnchor(text) {
 
 // يجلب أوقات الأذان والإقامة لأقرب مسجد مسجّل على mawaqit.net من الموقع الحالي
 // (بلا حاجة لمطابقته مع قائمة OSM — نأخذ أقرب نقطة مباشرة).
+// شرط: لا نعتبر "داخل المسجد" (ونفعّل وضع الصلاة) إلا إذا كانت المسافة الفعلية
+// إلى المسجد ≈ 0 كم (أي ضمن حدود المبنى نفسه — نفس التقريب المعروض في القائمة "0.0 كم").
+const RAKAT_MOSQUE_PROXIMITY_KM = 0.05; // 50 متر ≈ يُقرَّب إلى 0.0 كم في العرض
 async function getIqamaTimesForCurrentLocation() {
     if (!Number.isFinite(currentLat) || !Number.isFinite(currentLng)) return null;
     try {
@@ -2130,6 +2138,7 @@ async function getIqamaTimesForCurrentLocation() {
             if (d < bestDist) { bestDist = d; best = m; }
         }
         if (!best) return null;
+        if (bestDist > RAKAT_MOSQUE_PROXIMITY_KM) return null; // بعيد عن المسجد — لا تفعيل لوضع الصلاة
         rakatState.mosqueName = best.name || best.label || '';
         const rawTimes = best.times || [];
         const adhanTimes = rawTimes.length >= 6
@@ -2174,8 +2183,6 @@ async function refreshRakatContext() {
         rakatState.fardhCount = 0;
         rakatState.naflCount = 0;
         rakatState.takbirInRakat = 0;
-        rakatState.ihramSkipped = false;
-        rakatState.awaitingStandTakbir = false;
     }
     rakatState.prayerId = prayerId;
     rakatState.targetRakat = RAKAT_COUNTS[prayerId];
@@ -2216,10 +2223,8 @@ function setRakatStatus(msg, isError) {
 }
 
 // ── عدّ الركعات اعتماداً على عدد التكبيرات المسموعة فقط ──
-// أول تكبيرة مسموعة بعد الضغط على "بدء" تُعتبر تكبيرة الإحرام فتُتجاهل من الحساب.
-// بعدها: كل 5 تكبيرات (قيام→ركوع، ركوع→سجود1، سجود1→جلسة، جلسة→سجود2، سجود2→قيام/جلسة)
-// = ركعة واحدة مكتملة. في الصلاة ذات الثلاث أو الأربع ركعات، بعد إتمام الركعة الثانية
-// تأتي تكبيرة إضافية (القيام من التشهد الأول) لا تُحسب من أي ركعة.
+// كل 5 تكبيرات = ركعة واحدة مكتملة (بلا أي استثناء: تكبيرة الإحرام والقيام من
+// التشهد تُحسب مثل أي تكبيرة أخرى — تبسيطاً للعدّ).
 function advanceOneRakat() {
     // مع وجود إقامة حقيقية: التوقيت هو الفيصل بين النافلة والفرض (قبل الإقامة =
     // نافلة، بعدها = فرض حتى تكتمل العدد، وما بعد ذلك يعود نافلة). بدون إقامة
@@ -2235,25 +2240,10 @@ function advanceOneRakat() {
 }
 
 function registerTakbir() {
-    if (!rakatState.ihramSkipped) {
-        rakatState.ihramSkipped = true; // تكبيرة الإحرام — لا تُحسب
-        updateRakatUI();
-        return;
-    }
-    if (rakatState.awaitingStandTakbir) {
-        // تكبيرة القيام من التشهد الأول — لا تُحسب من أي ركعة
-        rakatState.awaitingStandTakbir = false;
-        updateRakatUI();
-        return;
-    }
     rakatState.takbirInRakat++;
     if (rakatState.takbirInRakat >= 5) {
         rakatState.takbirInRakat = 0;
         advanceOneRakat();
-        const doneCount = rakatState.fardhCount + rakatState.naflCount;
-        if (doneCount === 2 && rakatState.targetRakat > 2) {
-            rakatState.awaitingStandTakbir = true;
-        }
     }
     updateRakatUI();
 }
@@ -2358,8 +2348,6 @@ function stopMotionDetection() {
 // يشغّل الاستماع فعلياً (تُستدعى تلقائياً عند دخول وقت الإقامة، أو يدوياً بالزر)
 function startRakatListening() {
     rakatState.takbirInRakat = 0;
-    rakatState.ihramSkipped = false;
-    rakatState.awaitingStandTakbir = false;
     rakatState.overlayDismissed = false;
     if (typeof quranAudioPlaying !== 'undefined' && quranAudioPlaying) quranStopAudio(); // لا نزعج المصلين بصوت القرآن أثناء الصلاة
     const okSpeech = startRakatSpeech();
@@ -2382,6 +2370,7 @@ async function checkAutoStartRakat() {
     if (!hasMicBeenAsked()) return; // ننتظر إذن المستخدم مرة واحدة أولاً (زر مخصص أو التشغيل اليدوي)
     await refreshRakatContext();
     if (!rakatState.prayerId || !rakatState.inFardhWindow) return;
+    if (!rakatState.hasRealIqama) return; // لسنا داخل مسجد فعلياً (المسافة > 0 كم) — لا تفعيل تلقائي
     const key = rakatState.prayerId + '_' + new Date().toDateString();
     if (rakatState.autoStartedKey === key) return; // تم استهلاك هذه الصلاة (تلقائياً أو يدوياً)
     rakatState.autoStartedKey = key;
