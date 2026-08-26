@@ -2305,7 +2305,16 @@ let rakatState = {
     naflCount: 0,
     inFardhWindow: false,
     hasRealIqama: false,
-    takbirInRakat: 0, // عدد التكبيرات المسموعة ضمن الركعة الجارية (0..4، عند الوصول لـ5 تكتمل الركعة)
+    takbirInRakat: 0, // عدد التكبيرات المسموعة ضمن الركعة الجارية (0..4، عند الوصول لـ5 تكتمل الركعة) — مُشتقّ الآن، لا يُعدَّل يدوياً
+    // ── العدّ التراكمي القابل لإعادة الحساب (بدل الجمع المباشر) ──
+    // speechBaseline: مجموع التكبيرات المؤكَّدة من دورات تعرّف صوتي سابقة انتهت.
+    // speechCurrentCycleTotal: نتيجة إعادة حساب كامل نص الدورة الجارية من الصفر
+    // في كل onresult — يُستبدل لا يُضاف، فإن "فاتت" تكبيرة سابقاً ثم ظهرت في نص
+    // مُصحَّح لاحقاً، يُعاد احتسابها تلقائياً. motionTakbirTotal: نفس الفكرة
+    // لكن لقناة الاهتزاز المستقلة (لا تُصحَّح، فهي أصلاً حدث فوري لحظي).
+    speechBaseline: 0,
+    speechCurrentCycleTotal: 0,
+    motionTakbirTotal: 0,
     naflUnlocked: false, // يصبح true فقط بعد سماع تسليم فعلي لاحقاً لاكتمال الفرض
     autoStartedKey: null, // معرّف الصلاة (id_تاريخ) التي بدأ الاستماع من أجلها بالفعل
     recognition: null,
@@ -2362,9 +2371,9 @@ function checkSamiaAnchor(text) {
     }
     if (!found) return;
     if (rakatState.takbirInRakat === 0) {
-        rakatState.takbirInRakat = 1;
+        rakatState.speechBaseline += 1; // تصحيح دائم لا يُمحى عند إعادة حساب الدورة الجارية
+        recomputeRakatState();
         setRakatStatus('🔄 تم تصحيح العدّ تلقائياً بالاعتماد على "الله لمن حمده"', false);
-        updateRakatUI();
     }
 }
 
@@ -2381,9 +2390,8 @@ function checkSalamAnchor(text) {
     }
     if (!found) return;
     rakatState.naflUnlocked = true;
-    rakatState.takbirInRakat = 0;
+    recomputeRakatState();
     setRakatStatus('✓ تسليم مسموع — بدأ عدّ النافلة البعدية', false);
-    updateRakatUI();
 }
 
 // يجلب أوقات الأذان والإقامة لأقرب مسجد مسجّل على mawaqit.net من الموقع الحالي
@@ -2449,6 +2457,9 @@ async function refreshRakatContext() {
         rakatState.naflCount = 0;
         rakatState.takbirInRakat = 0;
         rakatState.naflUnlocked = false;
+        rakatState.speechBaseline = 0;
+        rakatState.speechCurrentCycleTotal = 0;
+        rakatState.motionTakbirTotal = 0;
     }
     rakatState.prayerId = prayerId;
     rakatState.targetRakat = RAKAT_COUNTS[prayerId];
@@ -2552,38 +2563,53 @@ function updateImamSpeechDisplay(text) {
 // ── عدّ الركعات اعتماداً على عدد التكبيرات المسموعة فقط ──
 // كل 5 تكبيرات = ركعة واحدة مكتملة (بلا أي استثناء: تكبيرة الإحرام والقيام من
 // التشهد تُحسب مثل أي تكبيرة أخرى — تبسيطاً للعدّ).
-function advanceOneRakat() {
-    // مع وجود إقامة حقيقية: التوقيت هو الفيصل بين النافلة والفرض (قبل الإقامة =
-    // نافلة قبلية، بعدها = فرض حتى تكتمل العدد). بدون إقامة حقيقية معروفة:
-    // العدد وحده يحدّد.
-    const fardhComplete = rakatState.fardhCount >= rakatState.targetRakat;
-    const isFardh = rakatState.hasRealIqama
-        ? (rakatState.inFardhWindow && !fardhComplete)
-        : (!fardhComplete);
-    if (isFardh) {
-        rakatState.fardhCount++;
-        return;
-    }
-    // الفرض مكتمل: لا نافلة بعدية تُحتسب إلا بعد تسليم فعلي مسموع
-    // (checkSalamAnchor). قبل ذلك، أي تكبير إضافي (صدى، خطأ تعرف صوتي...)
-    // يُتجاهل تماماً. أما النافلة القبلية (قبل الإقامة) فتبقى تُحتسب بحرية.
-    if (fardhComplete && !rakatState.naflUnlocked) return;
-    rakatState.naflCount++;
-}
-
-function registerTakbir() {
-    rakatState.takbirInRakat++;
-    if (rakatState.takbirInRakat >= 5) {
-        rakatState.takbirInRakat = 0;
-        advanceOneRakat();
+//
+// بدل تسجيل كل تكبيرة على حدة بشكل تراكمي لا رجعة فيه، يُعاد بناء الحالة
+// بالكامل من "المجموع الكلي الحالي" في كل مرة (recomputeRakatState). هذا
+// المجموع نفسه قابل لإعادة الحساب من الصفر عند كل onresult (انظر
+// startOneRecognitionCycle) — فإن كانت تكبيرة قد فاتت أو أُخطئ في التعرّف
+// عليها أول مرة، وظهرت لاحقاً بشكل صحيح في نص مُعاد تحليله، يُصحَّح العدّ
+// تلقائياً دون تدخّل يدوي، صعوداً أو نزولاً.
+function recomputeRakatState() {
+    const total = rakatState.speechBaseline + rakatState.speechCurrentCycleTotal + rakatState.motionTakbirTotal;
+    const rakatsCompleted = Math.floor(total / 5);
+    rakatState.takbirInRakat = total % 5;
+    // مع وجود إقامة حقيقية وقبل دخول وقتها: نافلة قبلية تُحتسب بحرية بلا قيد.
+    const preIqamaNafl = rakatState.hasRealIqama && !rakatState.inFardhWindow;
+    if (preIqamaNafl) {
+        rakatState.fardhCount = 0;
+        rakatState.naflCount = rakatsCompleted;
+    } else {
+        rakatState.fardhCount = Math.min(rakatsCompleted, rakatState.targetRakat);
+        // الفرض مكتمل: لا نافلة بعدية تُحتسب إلا بعد تسليم فعلي مسموع
+        // (checkSalamAnchor). قبل ذلك، أي تكبير إضافي (صدى، خطأ تعرف صوتي...) يُهمَل.
+        const extra = Math.max(0, rakatsCompleted - rakatState.targetRakat);
+        rakatState.naflCount = rakatState.naflUnlocked ? extra : 0;
     }
     updateRakatUI();
 }
 
-function handleTakbir(count) {
-    for (let i = 0; i < count; i++) {
-        registerTakbir();
+// ── تصحيح احتياطي بالاعتماد على تكرار الكلمات ──
+// "الله أكبر" تُقال أكثر من أي عبارة أخرى طوال الصلاة، فهي رياضياً الأكثر
+// تكراراً في كامل النص المُتعرَّف عليه. تُستخدم فقط كبديل احتياطي (بالتوازي مع
+// أنماط الـ regex، لا بدلاً عنها) — إن لم يجد الـ regex أي تكبيرة في النص،
+// نعتمد على أكثر ثنائية/كلمة تكراراً كتقدير للعدد بدل إرجاع صفر.
+function frequencyFallbackTakbirCount(text) {
+    const words = (text || '').trim().split(/\s+/).filter(w => w.length >= 2);
+    if (words.length < 4) return 0; // نص قصير جداً لا يُعطي تصويتاً موثوقاً
+    const bigramCounts = new Map();
+    for (let i = 0; i < words.length - 1; i++) {
+        const bg = words[i] + ' ' + words[i + 1];
+        bigramCounts.set(bg, (bigramCounts.get(bg) || 0) + 1);
     }
+    let bestBg = null, bestBgCount = 0;
+    for (const [bg, c] of bigramCounts) { if (c > bestBgCount) { bestBgCount = c; bestBg = bg; } }
+    if (bestBgCount >= 2) return bestBgCount;
+    const wordCounts = new Map();
+    for (const w of words) wordCounts.set(w, (wordCounts.get(w) || 0) + 1);
+    let bestWCount = 0;
+    for (const [, c] of wordCounts) { if (c > bestWCount) bestWCount = c; }
+    return bestWCount >= 2 ? bestWCount : 0;
 }
 
 // ── التعرف الصوتي على التكبير (Web Speech API) ──
@@ -2605,14 +2631,21 @@ function startOneRecognitionCycle() {
     rec.continuous = true;
     rec.interimResults = true;
     rec.onresult = function (event) {
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-            const transcript = event.results[i][0].transcript;
-            const n = countTakbirs(transcript);
-            if (n > 0) handleTakbir(n);
-            checkSamiaAnchor(transcript);
-            checkSalamAnchor(transcript);
-            updateImamSpeechDisplay(transcript);
+        // إعادة بناء النص الكامل المتراكم لهذه الدورة من الصفر في كل مرة (وليس
+        // فقط الجزء الجديد) — هذا يستوعب تصحيحات محرّك التعرّف الصوتي لنتائج
+        // مؤقّتة (interim) سبق أن نطقها بشكل مختلف.
+        let fullText = '';
+        for (let i = 0; i < event.results.length; i++) {
+            fullText += event.results[i][0].transcript + ' ';
         }
+        const regexCount = countTakbirs(fullText);
+        const freqCount = frequencyFallbackTakbirCount(fullText);
+        rakatState.speechCurrentCycleTotal = regexCount > 0 ? regexCount : freqCount;
+        recomputeRakatState();
+        checkSamiaAnchor(fullText);
+        checkSalamAnchor(fullText);
+        const latestChunk = event.results[event.results.length - 1][0].transcript;
+        updateImamSpeechDisplay(latestChunk);
     };
     rec.onerror = function (e) {
         if (e.error === 'not-allowed' || e.error === 'permission-denied') {
@@ -2620,6 +2653,10 @@ function startOneRecognitionCycle() {
         }
     };
     rec.onend = function () {
+        // تثبيت مجموع الدورة المنتهية في القاعدة الدائمة قبل بدء دورة جديدة
+        // (كل SpeechRecognition جديد يبدأ results فارغة من جديد).
+        rakatState.speechBaseline += rakatState.speechCurrentCycleTotal;
+        rakatState.speechCurrentCycleTotal = 0;
         if (rakatState.active) { startOneRecognitionCycle(); }
     };
     try { rec.start(); } catch (e) { return false; }
@@ -2661,7 +2698,8 @@ function handleMotionEvent(event) {
     if (!a || a.x === null) return;
     const magnitude = Math.sqrt((a.x || 0) ** 2 + (a.y || 0) ** 2 + (a.z || 0) ** 2);
     if (magnitude > MOTION_PEAK_THRESHOLD) {
-        handleTakbir(1); // نفس دالة التكبير الصوتي
+        rakatState.motionTakbirTotal++; // قناة مستقلة تراكمية، تُدمج مع مجموع الصوت عند إعادة الحساب
+        recomputeRakatState();
     }
 }
 
@@ -2679,9 +2717,12 @@ function stopMotionDetection() {
 
 // يشغّل الاستماع فعلياً (تُستدعى تلقائياً عند دخول وقت الإقامة، أو يدوياً بالزر)
 function startRakatListening() {
-    rakatState.takbirInRakat = 0;
+    rakatState.speechBaseline = 0;
+    rakatState.speechCurrentCycleTotal = 0;
+    rakatState.motionTakbirTotal = 0;
     rakatState.naflUnlocked = false;
     rakatState.overlayDismissed = false;
+    recomputeRakatState(); // يعيد fardhCount/naflCount/takbirInRakat إلى الصفر بشكل متسق
     if (typeof quranAudioPlaying !== 'undefined' && quranAudioPlaying) quranStopAudio(); // لا نزعج المصلين بصوت القرآن أثناء الصلاة
     const okSpeech = startRakatSpeech();
     if (!okSpeech) return false;
