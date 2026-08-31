@@ -2314,6 +2314,10 @@ let rakatState = {
     // لكن لقناة الاهتزاز المستقلة (لا تُصحَّح، فهي أصلاً حدث فوري لحظي).
     speechBaseline: 0,
     speechCurrentCycleTotal: 0,
+    // معرّف آخر نتيجة (result) من event.results تم "استهلاكها" فعلياً ضمن ركعة
+    // مكتملة ومؤكَّدة (final) — كل ما قبله يُحذف من التحليل، ولا يُعاد قراءة
+    // سوى "الرليكوا" (الجزء المتبقّي) لمنع إعادة احتساب نفس التسجيل مرتين.
+    speechConsumedUpToIndex: 0,
     motionTakbirTotal: 0,
     naflUnlocked: false, // يصبح true فقط بعد سماع تسليم فعلي لاحقاً لاكتمال الفرض
     autoStartedKey: null, // معرّف الصلاة (id_تاريخ) التي بدأ الاستماع من أجلها بالفعل
@@ -2631,19 +2635,47 @@ function startOneRecognitionCycle() {
     rec.continuous = true;
     rec.interimResults = true;
     rec.onresult = function (event) {
-        // إعادة بناء النص الكامل المتراكم لهذه الدورة من الصفر في كل مرة (وليس
-        // فقط الجزء الجديد) — هذا يستوعب تصحيحات محرّك التعرّف الصوتي لنتائج
-        // مؤقّتة (interim) سبق أن نطقها بشكل مختلف.
-        let fullText = '';
-        for (let i = 0; i < event.results.length; i++) {
-            fullText += event.results[i][0].transcript + ' ';
+        // لا نعيد قراءة النص كاملاً من الصفر بعد الآن — فقط "الرليكوا" (الجزء
+        // غير المُستهلَك بعد، ابتداءً من speechConsumedUpToIndex). النتائج
+        // المؤكَّدة (final) لا تتغيّر أبداً، أما الجزء المؤقّت (interim) فيُحسب
+        // فقط للعرض الحي دون أن يُستهلك (فقد يُصحَّح لاحقاً).
+        let pendingFinalText = '';
+        let interimText = '';
+        let lastFinalIndex = rakatState.speechConsumedUpToIndex - 1;
+        for (let i = rakatState.speechConsumedUpToIndex; i < event.results.length; i++) {
+            const transcript = event.results[i][0].transcript;
+            if (event.results[i].isFinal) {
+                pendingFinalText += transcript + ' ';
+                lastFinalIndex = i;
+            } else {
+                interimText += transcript + ' ';
+            }
         }
-        const regexCount = countTakbirs(fullText);
-        const freqCount = frequencyFallbackTakbirCount(fullText);
-        rakatState.speechCurrentCycleTotal = regexCount > 0 ? regexCount : freqCount;
+        const finalRegexCount = countTakbirs(pendingFinalText);
+        const finalFreqCount = frequencyFallbackTakbirCount(pendingFinalText);
+        const finalCount = finalRegexCount > 0 ? finalRegexCount : finalFreqCount;
+
+        const interimRegexCount = countTakbirs(interimText);
+        const interimFreqCount = frequencyFallbackTakbirCount(interimText);
+        const interimCount = interimRegexCount > 0 ? interimRegexCount : interimFreqCount;
+
+        rakatState.speechCurrentCycleTotal = finalCount + interimCount;
         recomputeRakatState();
-        checkSamiaAnchor(fullText);
-        checkSalamAnchor(fullText);
+
+        // ركعة كاملة (أو أكثر) ظهرت ضمن نص مؤكَّد: نثبّتها في القاعدة الدائمة
+        // ونحذف الجزء المُستخدَم من النص (نتقدّم speechConsumedUpToIndex) — لا
+        // يبقى قيد التحليل سوى الرليكوا، فيستحيل احتساب نفس التسجيل مرتين.
+        if (finalCount >= 5 && lastFinalIndex >= rakatState.speechConsumedUpToIndex) {
+            const completedRakats = Math.floor(finalCount / 5);
+            rakatState.speechBaseline += completedRakats * 5;
+            rakatState.speechCurrentCycleTotal = (finalCount % 5) + interimCount;
+            rakatState.speechConsumedUpToIndex = lastFinalIndex + 1;
+            recomputeRakatState();
+        }
+
+        const anchorText = pendingFinalText + interimText;
+        checkSamiaAnchor(anchorText);
+        checkSalamAnchor(anchorText);
         const latestChunk = event.results[event.results.length - 1][0].transcript;
         updateImamSpeechDisplay(latestChunk);
     };
@@ -2657,6 +2689,7 @@ function startOneRecognitionCycle() {
         // (كل SpeechRecognition جديد يبدأ results فارغة من جديد).
         rakatState.speechBaseline += rakatState.speechCurrentCycleTotal;
         rakatState.speechCurrentCycleTotal = 0;
+        rakatState.speechConsumedUpToIndex = 0;
         if (rakatState.active) { startOneRecognitionCycle(); }
     };
     try { rec.start(); } catch (e) { return false; }
@@ -2719,6 +2752,7 @@ function stopMotionDetection() {
 function startRakatListening() {
     rakatState.speechBaseline = 0;
     rakatState.speechCurrentCycleTotal = 0;
+    rakatState.speechConsumedUpToIndex = 0;
     rakatState.motionTakbirTotal = 0;
     rakatState.naflUnlocked = false;
     rakatState.overlayDismissed = false;
