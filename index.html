@@ -212,22 +212,25 @@
         .salat-live-transcript {
             position: absolute; bottom: 28px; left: 24px; right: 24px;
             font-family: 'Amiri', serif; font-size: 15px; color: rgba(255,215,0,0.35);
-            min-height: 20px; text-align: center; direction: rtl;
+            min-height: 20px; max-height: 32vh; overflow-y: auto; overflow-x: hidden;
+            text-align: center; direction: rtl; line-height: 1.7;
+            -ms-overflow-style: none; scrollbar-width: none;
         }
+        .salat-live-transcript::-webkit-scrollbar { display: none; }
         .salat-live-transcript .glow-match {
             color: var(--gold);
             text-shadow: 0 0 10px rgba(255,215,0,0.9), 0 0 20px rgba(255,215,0,0.5);
             font-weight: 700;
         }
         .salat-live-transcript .glow-ayah {
-            color: #6fe6b0;
-            text-shadow: 0 0 10px rgba(111,230,176,0.9), 0 0 22px rgba(111,230,176,0.6);
+            color: var(--gold);
+            text-shadow: 0 0 10px rgba(255,215,0,0.9), 0 0 22px rgba(255,215,0,0.6);
             font-weight: 700;
         }
         .salat-ayah-ref {
-            font-family: 'Amiri', serif; font-size: 13px; color: #6fe6b0;
+            font-family: 'Amiri', serif; font-size: 13px; color: var(--gold);
             text-align: center; direction: rtl; display: none; order: 4;
-            text-shadow: 0 0 8px rgba(111,230,176,0.4);
+            text-shadow: 0 0 8px rgba(255,215,0,0.4);
         }
 
         /* عداد الركعات: تكبير صوتي + وضعية الهاتف */
@@ -2238,10 +2241,12 @@ function buildQuranIndex() {
 // يتجاهل أي تطابق أقصر من AYAH_MIN_MATCH_WORDS كلمات لتفادي إيجابيات خاطئة
 // (كلمات شائعة جداً مثل "من" أو "في" تتكرر آلاف المرات فلا تكفي وحدها).
 const AYAH_MIN_MATCH_WORDS = 3;
-function findAyahMatch(transcriptWords) {
-    buildQuranIndex();
+
+// يُرجع أفضل تطابق واحد (أطول سلسلة) يبدأ من فهرس كلمة بعينه أو بعده — تُستخدم
+// داخلياً من طرف findAyahMatches أدناه.
+function findBestAyahMatchFrom(transcriptWords, fromIdx) {
     let best = null;
-    for (let i = 0; i < transcriptWords.length; i++) {
+    for (let i = fromIdx; i < transcriptWords.length; i++) {
         const candidates = QURAN_WORD_INDEX.get(transcriptWords[i].n);
         if (!candidates) continue;
         for (const gi of candidates) {
@@ -2255,8 +2260,23 @@ function findAyahMatch(transcriptWords) {
                 best = { startIdx: i, len, startGi: gi };
             }
         }
+        // بمجرد إيجاد أول تطابق كافٍ، لا داعي للاستمرار من مواضع بداية لاحقة
+        // ضمن هذا التطابق نفسه — يكفي إيجاد نقطة انطلاق واحدة صالحة قريبة.
+        if (best) break;
     }
+    return best;
+}
+
+// النسخة المفردة (يُبقى عليها للتوافق مع أي استدعاء قديم): أفضل تطابق واحد
+// عبر النص كاملاً بدءاً من أول كلمة.
+function findAyahMatch(transcriptWords) {
+    buildQuranIndex();
+    const best = findBestAyahMatchFrom(transcriptWords, 0);
     if (!best) return null;
+    return ayahMatchToSpan(transcriptWords, best);
+}
+
+function ayahMatchToSpan(transcriptWords, best) {
     const startWord = transcriptWords[best.startIdx];
     const endWord = transcriptWords[best.startIdx + best.len - 1];
     const startInfo = QURAN_WORDS[best.startGi];
@@ -2267,6 +2287,22 @@ function findAyahMatch(transcriptWords) {
         chapterStart: startInfo.c, verseStart: startInfo.v,
         chapterEnd: endInfo.c, verseEnd: endInfo.v,
     };
+}
+
+// يبحث عن كل التطابقات القرآنية (غير المتداخلة) ضمن نص كامل، وليس تطابقاً
+// واحداً فقط — هذا ما يسمح ببقاء كل مقطع آية سبق أن أُضيء ظاهراً على الشاشة
+// حتى بعد نمو النص المعروض بمقاطع كلام لاحقة.
+function findAyahMatches(transcriptWords) {
+    buildQuranIndex();
+    const matches = [];
+    let i = 0;
+    while (i < transcriptWords.length) {
+        const best = findBestAyahMatchFrom(transcriptWords, i);
+        if (!best) break;
+        matches.push(ayahMatchToSpan(transcriptWords, best));
+        i = best.startIdx + best.len; // نتابع البحث بعد نهاية هذا التطابق مباشرة
+    }
+    return matches;
 }
 
 function ayahRefLabel(m) {
@@ -2325,7 +2361,14 @@ let rakatState = {
     autoStartedKey: null, // معرّف الصلاة (id_تاريخ) التي بدأ الاستماع من أجلها بالفعل
     recognition: null,
     contextInterval: null,
+    // ── مخزن نص العرض المرئي (منفصل تماماً عن منطق عدّ الركعات) ──
+    // يتراكم بدون توقف طوال الصلاة: كل نص "نهائي" (final) يُضاف إليه ولا
+    // يُحذف أبداً، حتى لو استُهلك من أجل عدّ الركعات أو بدأت دورة تعرف صوتي
+    // جديدة (onend). هذا يضمن أن أي مقطع أضيء لكونه آية أو مرساة يبقى
+    // ظاهراً على الشاشة، بدل أن يُمحى بمجرد وصول مقطع كلام جديد.
+    displayBuffer: '',
 };
+const RAKAT_DISPLAY_MAX_CHARS = 600; // سقف طول العرض لتفادي بطء المطابقة/الرسم
 
 // ── طلب إذن الميكروفون مرة واحدة فقط طوال عمر التطبيق (بضغطة مستخدم حقيقية) ──
 // المتصفحات تتطلب لمسة مستخدم لأول إذن ميكروفون؛ بعدها الإذن يبقى محفوظاً
@@ -2530,13 +2573,19 @@ function updateImamSpeechDisplay(text) {
             if (m.index === reg.lastIndex) reg.lastIndex++;
         }
     }
-    // مطابقة الآيات القرآنية المتلوة فعلياً (وليس فقط أنماط التكبير/الأنكر)
+    // مطابقة كل الآيات القرآنية المتلوة فعلياً ضمن النص كاملاً (وليس تطابقاً
+    // واحداً فقط) — بذلك يبقى كل مقطع آية أُضيء سابقاً ظاهراً بإضاءته حتى بعد
+    // نمو النص بمقاطع كلام جديدة، بدل أن "يُمحى" ويظهر تطابق واحد أخير فقط.
     const transcriptWords = tokenizeArabicWithOffsets(text);
-    const ayahMatch = findAyahMatch(transcriptWords);
-    if (ayahMatch) {
-        matches.push({ start: ayahMatch.start, end: ayahMatch.end, cls: 'glow-ayah' });
+    const ayahMatches = findAyahMatches(transcriptWords);
+    for (const am of ayahMatches) {
+        matches.push({ start: am.start, end: am.end, cls: 'glow-ayah' });
+    }
+    if (ayahMatches.length) {
+        // نعرض مرجع آخر آية تم التعرف عليها (الأحدث زمنياً في النص)
+        const lastAyah = ayahMatches[ayahMatches.length - 1];
         if (refEl) {
-            refEl.textContent = ayahRefLabel(ayahMatch);
+            refEl.textContent = ayahRefLabel(lastAyah);
             refEl.style.display = 'block';
         }
     } else if (refEl) {
@@ -2563,6 +2612,8 @@ function updateImamSpeechDisplay(text) {
     }
     html += escapeHtml(text.slice(cursor));
     el.innerHTML = html;
+    // إبقاء أسفل النص (أحدث كلام) ظاهراً دوماً بما أن المخزن يكبر باستمرار
+    el.scrollTop = el.scrollHeight;
 }
 
 // ── عدّ الركعات اعتماداً حصرياً على مرساة "سمع الله لمن حمده / ربنا ولك
@@ -2648,8 +2699,20 @@ function startOneRecognitionCycle() {
 
         const anchorText = pendingFinalText + interimText;
         checkSalamAnchor(anchorText);
-        const latestChunk = event.results[event.results.length - 1][0].transcript;
-        updateImamSpeechDisplay(latestChunk);
+
+        // ── تحديث مخزن العرض المرئي (مستقل عن منطق عدّ الركعات) ──
+        // نضيف كل نص "نهائي" جديد إلى المخزن الدائم فور تأكّده (لا يُحذف أبداً
+        // بعد ذلك)، ثم نعرض المخزن كاملاً + الجزء المؤقّت الحالي في الآخر —
+        // هكذا يبقى أي مقطع أُضيء (آية أو مرساة) ظاهراً على الشاشة، ولا
+        // "يُمحى" عند وصول كلام جديد لاحق.
+        if (pendingFinalText.trim()) {
+            rakatState.displayBuffer = (rakatState.displayBuffer + ' ' + pendingFinalText).trim();
+            if (rakatState.displayBuffer.length > RAKAT_DISPLAY_MAX_CHARS) {
+                rakatState.displayBuffer = rakatState.displayBuffer.slice(-RAKAT_DISPLAY_MAX_CHARS);
+            }
+        }
+        const fullDisplayText = (rakatState.displayBuffer + ' ' + interimText).trim();
+        updateImamSpeechDisplay(fullDisplayText);
     };
     rec.onerror = function (e) {
         if (e.error === 'not-allowed' || e.error === 'permission-denied') {
@@ -2690,6 +2753,7 @@ function startRakatListening() {
     rakatState.speechConsumedUpToIndex = 0;
     rakatState.naflUnlocked = false;
     rakatState.overlayDismissed = false;
+    rakatState.displayBuffer = ''; // بداية جديدة: لا نُبقي كلام الصلاة السابقة على الشاشة
     recomputeRakatState(); // يعيد fardhCount/naflCount إلى الصفر بشكل متسق
     if (typeof quranAudioPlaying !== 'undefined' && quranAudioPlaying) quranStopAudio(); // لا نزعج المصلين بصوت القرآن أثناء الصلاة
     const okSpeech = startRakatSpeech();
