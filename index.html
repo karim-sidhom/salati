@@ -212,25 +212,22 @@
         .salat-live-transcript {
             position: absolute; bottom: 28px; left: 24px; right: 24px;
             font-family: 'Amiri', serif; font-size: 15px; color: rgba(255,215,0,0.35);
-            min-height: 20px; max-height: 32vh; overflow-y: auto; overflow-x: hidden;
-            text-align: center; direction: rtl; line-height: 1.7;
-            -ms-overflow-style: none; scrollbar-width: none;
+            min-height: 20px; text-align: center; direction: rtl;
         }
-        .salat-live-transcript::-webkit-scrollbar { display: none; }
         .salat-live-transcript .glow-match {
             color: var(--gold);
             text-shadow: 0 0 10px rgba(255,215,0,0.9), 0 0 20px rgba(255,215,0,0.5);
             font-weight: 700;
         }
         .salat-live-transcript .glow-ayah {
-            color: var(--gold);
-            text-shadow: 0 0 10px rgba(255,215,0,0.9), 0 0 22px rgba(255,215,0,0.6);
+            color: #6fe6b0;
+            text-shadow: 0 0 10px rgba(111,230,176,0.9), 0 0 22px rgba(111,230,176,0.6);
             font-weight: 700;
         }
         .salat-ayah-ref {
-            font-family: 'Amiri', serif; font-size: 13px; color: var(--gold);
+            font-family: 'Amiri', serif; font-size: 13px; color: #6fe6b0;
             text-align: center; direction: rtl; display: none; order: 4;
-            text-shadow: 0 0 8px rgba(255,215,0,0.4);
+            text-shadow: 0 0 8px rgba(111,230,176,0.4);
         }
 
         /* عداد الركعات: تكبير صوتي + وضعية الهاتف */
@@ -464,6 +461,21 @@
             <button id="quran-goto-today" class="quran-goto-btn" data-i18n="quran_goto_btn">انتقل إليه</button>
         </div>
         <div class="quran-controls">
+            <span style="flex-shrink:0; font-size:12px; color: var(--muted);" data-i18n="quran_reading_label">📜 رواية القراءة:</span>
+            <select id="quran-reading-select" class="quran-hizb-select" style="flex:1;">
+                <option value="hafs" data-i18n="quran_reading_hafs">حفص عن عاصم (الأصل)</option>
+                <option value="qalun" data-i18n="quran_reading_qalun">قالون عن نافع (تونس والمغرب العربي)</option>
+            </select>
+        </div>
+        <div id="quran-reading-note" class="quran-audio-status" style="display:none; margin-bottom:8px;" data-i18n="quran_reading_qalun_note"></div>
+        <div id="quran-qalun-reciter-wrap" class="quran-controls" style="display:none;">
+            <span style="flex-shrink:0; font-size:12px; color: var(--muted);" data-i18n="quran_qalun_reciter_label">🎙️ القارئ:</span>
+            <select id="quran-qalun-reciter-select" class="quran-hizb-select" style="flex:1;">
+                <option value="deban" data-i18n="quran_qalun_reciter_deban">أحمد ديبان</option>
+                <option value="barrak" data-i18n="quran_qalun_reciter_barrak">علي البراق (القيروان، تونس)</option>
+            </select>
+        </div>
+        <div class="quran-controls">
             <button id="quran-prev" class="quran-nav-btn">‹</button>
             <select id="quran-hizb-select" class="quran-hizb-select"></select>
             <button id="quran-next" class="quran-nav-btn">›</button>
@@ -600,7 +612,16 @@ const I18N = {
         sec_quran: 'قراءة القرآن الكريم — 60 حزباً',
         quran_today_hizb_label: '📅 حزب اليوم:',
         quran_goto_btn: 'انتقل إليه',
+        quran_reading_label: '📜 رواية القراءة:',
+        quran_reading_hafs: 'حفص عن عاصم (الأصل)',
+        quran_reading_qalun: 'قالون عن نافع (تونس والمغرب العربي)',
+        quran_reading_qalun_note: 'رواية قالون: النص من مصدر مستقل قد يختلف طفيفاً عن رواية حفص في بعض المواضع — التفسير المعروض واحد في الروايتين.',
+        quran_qalun_reciter_label: '🎙️ القارئ:',
+        quran_qalun_reciter_deban: 'أحمد ديبان',
+        quran_qalun_reciter_barrak: 'علي البراق (القيروان، تونس)',
         quran_play_btn: '▶️ استماع (العفاسي)',
+        quran_play_btn_qalun: '▶️ استماع (برواية قالون)',
+        quran_audio_surah_progress: 'سورة {i} / {n}',
         quran_state_default: 'اختر حزباً ثم اضغط "عرض النص" أو "استماع"',
         quran_load_btn: '📖 عرض النص',
         quran_done_btn: '✓ أتممت قراءة هذا الحزب',
@@ -696,7 +717,16 @@ const I18N = {
         sec_quran: 'Lecture du Coran — 60 hizb',
         quran_today_hizb_label: '📅 Hizb du jour :',
         quran_goto_btn: 'Y aller',
+        quran_reading_label: '📜 Lecture (riwaya) :',
+        quran_reading_hafs: 'Hafs \u2019an Assim (par défaut)',
+        quran_reading_qalun: 'Qalun \u2019an Nafi\u2019 (Tunisie / Maghreb)',
+        quran_reading_qalun_note: 'Lecture Qalun : texte issu d\u2019une source indépendante, pouvant différer légèrement de Hafs à quelques endroits — l\u2019explication (tafsir) affichée reste la même dans les deux lectures.',
+        quran_qalun_reciter_label: '🎙️ Récitateur :',
+        quran_qalun_reciter_deban: 'Ahmed Deban',
+        quran_qalun_reciter_barrak: 'Ali Al Barrak (Kairouan, Tunisie)',
         quran_play_btn: '▶️ Écouter (Al-Afasy)',
+        quran_play_btn_qalun: '▶️ Écouter (récitation Qalun)',
+        quran_audio_surah_progress: 'Sourate {i} / {n}',
         quran_state_default: 'Choisissez un hizb puis appuyez sur "Afficher le texte" ou "Écouter"',
         quran_load_btn: '📖 Afficher le texte',
         quran_done_btn: '✓ Hizb terminé',
@@ -792,7 +822,16 @@ const I18N = {
         sec_quran: 'Quran reading — 60 hizb',
         quran_today_hizb_label: '📅 Today\u2019s hizb:',
         quran_goto_btn: 'Go to it',
+        quran_reading_label: '📜 Reading (riwaya):',
+        quran_reading_hafs: 'Hafs \u2019an Asim (default)',
+        quran_reading_qalun: 'Qalun \u2019an Nafi\u2019 (Tunisia / Maghreb)',
+        quran_reading_qalun_note: 'Qalun reading: text from an independent source, which may differ slightly from Hafs in a few places — the explanation (tafsir) shown is the same for both readings.',
+        quran_qalun_reciter_label: '🎙️ Reciter:',
+        quran_qalun_reciter_deban: 'Ahmed Deban',
+        quran_qalun_reciter_barrak: 'Ali Al Barrak (Kairouan, Tunisia)',
         quran_play_btn: '▶️ Listen (Al-Afasy)',
+        quran_play_btn_qalun: '▶️ Listen (Qalun recitation)',
+        quran_audio_surah_progress: 'Surah {i} / {n}',
         quran_state_default: 'Choose a hizb then tap "Show text" or "Listen"',
         quran_load_btn: '📖 Show text',
         quran_done_btn: '✓ Hizb completed',
@@ -2241,12 +2280,10 @@ function buildQuranIndex() {
 // يتجاهل أي تطابق أقصر من AYAH_MIN_MATCH_WORDS كلمات لتفادي إيجابيات خاطئة
 // (كلمات شائعة جداً مثل "من" أو "في" تتكرر آلاف المرات فلا تكفي وحدها).
 const AYAH_MIN_MATCH_WORDS = 3;
-
-// يُرجع أفضل تطابق واحد (أطول سلسلة) يبدأ من فهرس كلمة بعينه أو بعده — تُستخدم
-// داخلياً من طرف findAyahMatches أدناه.
-function findBestAyahMatchFrom(transcriptWords, fromIdx) {
+function findAyahMatch(transcriptWords) {
+    buildQuranIndex();
     let best = null;
-    for (let i = fromIdx; i < transcriptWords.length; i++) {
+    for (let i = 0; i < transcriptWords.length; i++) {
         const candidates = QURAN_WORD_INDEX.get(transcriptWords[i].n);
         if (!candidates) continue;
         for (const gi of candidates) {
@@ -2260,23 +2297,8 @@ function findBestAyahMatchFrom(transcriptWords, fromIdx) {
                 best = { startIdx: i, len, startGi: gi };
             }
         }
-        // بمجرد إيجاد أول تطابق كافٍ، لا داعي للاستمرار من مواضع بداية لاحقة
-        // ضمن هذا التطابق نفسه — يكفي إيجاد نقطة انطلاق واحدة صالحة قريبة.
-        if (best) break;
     }
-    return best;
-}
-
-// النسخة المفردة (يُبقى عليها للتوافق مع أي استدعاء قديم): أفضل تطابق واحد
-// عبر النص كاملاً بدءاً من أول كلمة.
-function findAyahMatch(transcriptWords) {
-    buildQuranIndex();
-    const best = findBestAyahMatchFrom(transcriptWords, 0);
     if (!best) return null;
-    return ayahMatchToSpan(transcriptWords, best);
-}
-
-function ayahMatchToSpan(transcriptWords, best) {
     const startWord = transcriptWords[best.startIdx];
     const endWord = transcriptWords[best.startIdx + best.len - 1];
     const startInfo = QURAN_WORDS[best.startGi];
@@ -2287,22 +2309,6 @@ function ayahMatchToSpan(transcriptWords, best) {
         chapterStart: startInfo.c, verseStart: startInfo.v,
         chapterEnd: endInfo.c, verseEnd: endInfo.v,
     };
-}
-
-// يبحث عن كل التطابقات القرآنية (غير المتداخلة) ضمن نص كامل، وليس تطابقاً
-// واحداً فقط — هذا ما يسمح ببقاء كل مقطع آية سبق أن أُضيء ظاهراً على الشاشة
-// حتى بعد نمو النص المعروض بمقاطع كلام لاحقة.
-function findAyahMatches(transcriptWords) {
-    buildQuranIndex();
-    const matches = [];
-    let i = 0;
-    while (i < transcriptWords.length) {
-        const best = findBestAyahMatchFrom(transcriptWords, i);
-        if (!best) break;
-        matches.push(ayahMatchToSpan(transcriptWords, best));
-        i = best.startIdx + best.len; // نتابع البحث بعد نهاية هذا التطابق مباشرة
-    }
-    return matches;
 }
 
 function ayahRefLabel(m) {
@@ -2361,14 +2367,7 @@ let rakatState = {
     autoStartedKey: null, // معرّف الصلاة (id_تاريخ) التي بدأ الاستماع من أجلها بالفعل
     recognition: null,
     contextInterval: null,
-    // ── مخزن نص العرض المرئي (منفصل تماماً عن منطق عدّ الركعات) ──
-    // يتراكم بدون توقف طوال الصلاة: كل نص "نهائي" (final) يُضاف إليه ولا
-    // يُحذف أبداً، حتى لو استُهلك من أجل عدّ الركعات أو بدأت دورة تعرف صوتي
-    // جديدة (onend). هذا يضمن أن أي مقطع أضيء لكونه آية أو مرساة يبقى
-    // ظاهراً على الشاشة، بدل أن يُمحى بمجرد وصول مقطع كلام جديد.
-    displayBuffer: '',
 };
-const RAKAT_DISPLAY_MAX_CHARS = 600; // سقف طول العرض لتفادي بطء المطابقة/الرسم
 
 // ── طلب إذن الميكروفون مرة واحدة فقط طوال عمر التطبيق (بضغطة مستخدم حقيقية) ──
 // المتصفحات تتطلب لمسة مستخدم لأول إذن ميكروفون؛ بعدها الإذن يبقى محفوظاً
@@ -2573,19 +2572,13 @@ function updateImamSpeechDisplay(text) {
             if (m.index === reg.lastIndex) reg.lastIndex++;
         }
     }
-    // مطابقة كل الآيات القرآنية المتلوة فعلياً ضمن النص كاملاً (وليس تطابقاً
-    // واحداً فقط) — بذلك يبقى كل مقطع آية أُضيء سابقاً ظاهراً بإضاءته حتى بعد
-    // نمو النص بمقاطع كلام جديدة، بدل أن "يُمحى" ويظهر تطابق واحد أخير فقط.
+    // مطابقة الآيات القرآنية المتلوة فعلياً (وليس فقط أنماط التكبير/الأنكر)
     const transcriptWords = tokenizeArabicWithOffsets(text);
-    const ayahMatches = findAyahMatches(transcriptWords);
-    for (const am of ayahMatches) {
-        matches.push({ start: am.start, end: am.end, cls: 'glow-ayah' });
-    }
-    if (ayahMatches.length) {
-        // نعرض مرجع آخر آية تم التعرف عليها (الأحدث زمنياً في النص)
-        const lastAyah = ayahMatches[ayahMatches.length - 1];
+    const ayahMatch = findAyahMatch(transcriptWords);
+    if (ayahMatch) {
+        matches.push({ start: ayahMatch.start, end: ayahMatch.end, cls: 'glow-ayah' });
         if (refEl) {
-            refEl.textContent = ayahRefLabel(lastAyah);
+            refEl.textContent = ayahRefLabel(ayahMatch);
             refEl.style.display = 'block';
         }
     } else if (refEl) {
@@ -2612,8 +2605,6 @@ function updateImamSpeechDisplay(text) {
     }
     html += escapeHtml(text.slice(cursor));
     el.innerHTML = html;
-    // إبقاء أسفل النص (أحدث كلام) ظاهراً دوماً بما أن المخزن يكبر باستمرار
-    el.scrollTop = el.scrollHeight;
 }
 
 // ── عدّ الركعات اعتماداً حصرياً على مرساة "سمع الله لمن حمده / ربنا ولك
@@ -2699,20 +2690,8 @@ function startOneRecognitionCycle() {
 
         const anchorText = pendingFinalText + interimText;
         checkSalamAnchor(anchorText);
-
-        // ── تحديث مخزن العرض المرئي (مستقل عن منطق عدّ الركعات) ──
-        // نضيف كل نص "نهائي" جديد إلى المخزن الدائم فور تأكّده (لا يُحذف أبداً
-        // بعد ذلك)، ثم نعرض المخزن كاملاً + الجزء المؤقّت الحالي في الآخر —
-        // هكذا يبقى أي مقطع أُضيء (آية أو مرساة) ظاهراً على الشاشة، ولا
-        // "يُمحى" عند وصول كلام جديد لاحق.
-        if (pendingFinalText.trim()) {
-            rakatState.displayBuffer = (rakatState.displayBuffer + ' ' + pendingFinalText).trim();
-            if (rakatState.displayBuffer.length > RAKAT_DISPLAY_MAX_CHARS) {
-                rakatState.displayBuffer = rakatState.displayBuffer.slice(-RAKAT_DISPLAY_MAX_CHARS);
-            }
-        }
-        const fullDisplayText = (rakatState.displayBuffer + ' ' + interimText).trim();
-        updateImamSpeechDisplay(fullDisplayText);
+        const latestChunk = event.results[event.results.length - 1][0].transcript;
+        updateImamSpeechDisplay(latestChunk);
     };
     rec.onerror = function (e) {
         if (e.error === 'not-allowed' || e.error === 'permission-denied') {
@@ -2753,7 +2732,6 @@ function startRakatListening() {
     rakatState.speechConsumedUpToIndex = 0;
     rakatState.naflUnlocked = false;
     rakatState.overlayDismissed = false;
-    rakatState.displayBuffer = ''; // بداية جديدة: لا نُبقي كلام الصلاة السابقة على الشاشة
     recomputeRakatState(); // يعيد fardhCount/naflCount إلى الصفر بشكل متسق
     if (typeof quranAudioPlaying !== 'undefined' && quranAudioPlaying) quranStopAudio(); // لا نزعج المصلين بصوت القرآن أثناء الصلاة
     const okSpeech = startRakatSpeech();
@@ -3343,6 +3321,84 @@ function initApp(lat, lng) {
 
 const QURAN_HIZB_COUNT = 60;
 let quranCurrentHizb = 1;
+
+// ─── رواية القراءة (قراءة ثانية) : حفص عن عاصم (الأصل) أو قالون عن نافع ─────
+// المصدر النصي لرواية قالون: fawazahmed0/quran-api، مصحف "ara-quranqaloon"
+// (ترقيم الآيات فيه موحّد مع الترقيم العثماني المستخدم في alquran.cloud، لذا
+// نعيد استخدام حدود الحزب/الربع المحسوبة من رواية حفص لتحديد أي آيات نعرضها،
+// ونستبدل نصّها فقط بنص رواية قالون لكل سورة). التفسير والترجمة يبقيان كما هما
+// (مصدر واحد للتفسير، غير مرتبط بالرواية) — طبقاً لما طلبه المستخدم صراحة.
+// الصوت لرواية قالون: قراءة كاملة للسورة (وليست آية بآية كما في حفص) من
+// mp3quran.net — القارئ "أحمد ديبان"، رواية قالون عن نافع، تغطي المصحف كاملاً.
+const QURAN_QALUN_TEXT_BASE = 'https://cdn.jsdelivr.net/gh/fawazahmed0/quran-api@1/editions/ara-quranqaloon';
+// رواية قالون: يمكن الاختيار بين قارئين — أحمد ديبان (mp3quran.net، مصر) أو
+// الشيخ التونسي علي البراق (القيروان، 1899-1981)، أحد أشهر قرّاء قالون في
+// تونس والمغرب العربي، عبر مرآة suratmp3.com (مصدر مصحف كامل 114 سورة).
+const QURAN_QALUN_RECITERS = {
+    deban: { audioBase: 'https://server16.mp3quran.net/deban/Rewayat-Qalon-A-n-Nafi/' },
+    barrak: { audioBase: 'https://dl.suratmp3.com/mp3/reciter/66/64/' },
+};
+let quranReading = localStorage.getItem('quran_reading') || 'hafs';
+let quranQalunReciter = localStorage.getItem('quran_qalun_reciter') || 'deban';
+if (!QURAN_QALUN_RECITERS[quranQalunReciter]) quranQalunReciter = 'deban';
+const quranQalunSurahCache = new Map(); // surahNumber -> Map(ayahNumberInSurah -> text) | null (échec)
+
+function quranQalunSurahAudioUrl(surahNumber) {
+    const base = (QURAN_QALUN_RECITERS[quranQalunReciter] || QURAN_QALUN_RECITERS.deban).audioBase;
+    return `${base}${String(surahNumber).padStart(3, '0')}.mp3`;
+}
+
+// يجلب نص سورة كاملة برواية قالون ويخزّنها مؤقتاً (Map: رقم الآية داخل السورة → النص).
+// عند أي فشل أو شكل بيانات غير متوقع، يعيد null بهدوء بدل كسر عرض النص — في هذه
+// الحالة يبقى النص المعروض هو نص حفص العثماني (احتياطياً) لتلك الآيات فقط.
+async function quranFetchQalunSurah(surahNumber) {
+    if (quranQalunSurahCache.has(surahNumber)) return quranQalunSurahCache.get(surahNumber);
+    try {
+        const res = await fetch(`${QURAN_QALUN_TEXT_BASE}/${surahNumber}.min.json`, { signal: AbortSignal.timeout(15000) });
+        if (!res.ok) throw new Error(`status ${res.status}`);
+        const data = await res.json();
+        // أشكال محتملة لاستجابة هذا المصدر: { quran: [{chapter, verse, text}, ...] }
+        // أو مصفوفة مباشرة [{chapter, verse, text}, ...] — نتعامل مع الاثنين احتياطياً.
+        const list = Array.isArray(data) ? data : (data && Array.isArray(data.quran) ? data.quran : null);
+        if (!list) throw new Error('unexpected-shape');
+        const map = new Map();
+        list.forEach(v => {
+            const verseNum = v.verse ?? v.numberInSurah ?? v.ayah;
+            const text = v.text ?? v.arabic ?? v.arabic_text;
+            if (verseNum != null && text) map.set(Number(verseNum), text);
+        });
+        quranQalunSurahCache.set(surahNumber, map);
+        return map;
+    } catch (e) {
+        quranQalunSurahCache.set(surahNumber, null);
+        return null;
+    }
+}
+
+function quranUpdatePlayBtnLabel() {
+    const btn = document.getElementById('quran-play');
+    if (!btn || quranAudioPlaying) return; // لا نغيّر النص أثناء التشغيل (زر "إيقاف" ظاهر حينها)
+    btn.textContent = t(quranReading === 'qalun' ? 'quran_play_btn_qalun' : 'quran_play_btn');
+}
+
+function quranSetReading(reading) {
+    quranReading = (reading === 'qalun') ? 'qalun' : 'hafs';
+    localStorage.setItem('quran_reading', quranReading);
+    const note = document.getElementById('quran-reading-note');
+    if (note) note.style.display = (quranReading === 'qalun') ? 'block' : 'none';
+    const reciterWrap = document.getElementById('quran-qalun-reciter-wrap');
+    if (reciterWrap) reciterWrap.style.display = (quranReading === 'qalun') ? 'flex' : 'none';
+    quranUpdatePlayBtnLabel();
+    if (quranAudioPlaying) quranStopAudio();
+    if (quranTextIsOpen) quranLoadText();
+}
+
+function quranSetQalunReciter(reciter) {
+    quranQalunReciter = QURAN_QALUN_RECITERS[reciter] ? reciter : 'deban';
+    localStorage.setItem('quran_qalun_reciter', quranQalunReciter);
+    if (quranAudioPlaying) quranStopAudio();
+}
+
 let quranAudioEl = null;
 let quranAudioQueue = [];
 let quranAudioIdx = 0;
@@ -3410,6 +3466,7 @@ async function quranLoadText() {
     quranTextIsOpen = true;
     quranSetState(t('quran_loading_hizb', { n: hizb }));
     const translationEdition = QURAN_TRANSLATION_EDITION[currentLang];
+    const readingAtStart = quranReading;
     try {
         const [ayahs, translations, tafsirs] = await Promise.all([
             quranFetchHizbEdition(hizb, 'quran-uthmani'),
@@ -3417,6 +3474,16 @@ async function quranLoadText() {
             quranShowTafsir ? quranFetchHizbEdition(hizb, QURAN_TAFSIR_EDITION).catch(() => null) : Promise.resolve(null),
         ]);
         if (hizb !== quranCurrentHizb) return;
+        // رواية قالون: نجلب نص كل سورة معنية من مصدر قالون (بموازاة، مع تخزين
+        // مؤقت) ونستبدل به نص حفص لكل آية — الترقيم (سورة/رقم آية) هو نفسه في
+        // المصدرين، فقط النص العربي يختلف. أي سورة يفشل جلبها تبقى بنص حفص.
+        let qalunBySurah = null;
+        if (readingAtStart === 'qalun') {
+            const surahNumbers = [...new Set(ayahs.filter(a => a.surah).map(a => a.surah.number))];
+            const maps = await Promise.all(surahNumbers.map(n => quranFetchQalunSurah(n)));
+            if (hizb !== quranCurrentHizb || readingAtStart !== quranReading) return;
+            qalunBySurah = new Map(surahNumbers.map((n, i) => [n, maps[i]]));
+        }
         box.innerHTML = '';
         let lastSurah = null;
         ayahs.forEach((a, i) => {
@@ -3427,8 +3494,14 @@ async function quranLoadText() {
                 h.textContent = a.surah.name;
                 box.appendChild(h);
             }
+            let ayahText = a.text;
+            if (qalunBySurah && a.surah) {
+                const surahMap = qalunBySurah.get(a.surah.number);
+                const qText = surahMap && surahMap.get(a.numberInSurah);
+                if (qText) ayahText = qText;
+            }
             const span = document.createElement('span');
-            span.textContent = a.text + ' ';
+            span.textContent = ayahText + ' ';
             const num = document.createElement('span');
             num.className = 'ayah-num';
             num.textContent = `﴿${a.numberInSurah}﴾ `;
@@ -3471,7 +3544,7 @@ function quranStopAudio() {
     quranAudioPlaying = false;
     quranAudioLoadSeq++;
     if (quranAudioEl) { quranAudioEl.pause(); quranAudioEl = null; }
-    document.getElementById('quran-play').textContent = t('quran_play_btn');
+    quranUpdatePlayBtnLabel();
     document.getElementById('quran-audio-status').textContent = '';
 }
 
@@ -3479,11 +3552,12 @@ function quranPlayNext() {
     if (!quranAudioPlaying || quranAudioIdx >= quranAudioQueue.length) {
         if (quranAudioPlaying) document.getElementById('quran-audio-status').textContent = t('quran_audio_finished');
         quranAudioPlaying = false;
-        document.getElementById('quran-play').textContent = t('quran_play_btn');
+        quranUpdatePlayBtnLabel();
         return;
     }
     const url = quranAudioQueue[quranAudioIdx];
-    document.getElementById('quran-audio-status').textContent = t('quran_audio_ayah_progress', { i: quranAudioIdx + 1, n: quranAudioQueue.length });
+    const progressKey = quranReading === 'qalun' ? 'quran_audio_surah_progress' : 'quran_audio_ayah_progress';
+    document.getElementById('quran-audio-status').textContent = t(progressKey, { i: quranAudioIdx + 1, n: quranAudioQueue.length });
     const audio = new Audio(url);
     quranAudioEl = audio;
     audio.onended = () => { quranAudioIdx++; quranPlayNext(); };
@@ -3494,19 +3568,31 @@ function quranPlayNext() {
 async function quranToggleAudio() {
     if (quranAudioPlaying) { quranStopAudio(); return; }
     const hizb = quranCurrentHizb;
+    const reading = quranReading;
     const seq = ++quranAudioLoadSeq;
     document.getElementById('quran-play').textContent = t('quran_pause_btn');
     document.getElementById('quran-audio-status').textContent = t('quran_audio_loading');
     try {
-        const ayahs = await quranFetchHizbEdition(hizb, 'ar.alafasy');
-        if (seq !== quranAudioLoadSeq) return;
-        quranAudioQueue = ayahs.map(a => a.audio).filter(Boolean);
+        if (reading === 'qalun') {
+            // لا يتوفر بعد مصدر مفتوح لصوت آية بآية برواية قالون، فنستخدم تلاوة
+            // كل سورة كاملة (قارئ: أحمد ديبان، رواية قالون عن نافع) لكل سور
+            // الحزب المختار، تُشغَّل الواحدة تلو الأخرى.
+            const ayahs = await quranFetchHizbEdition(hizb, 'quran-uthmani');
+            if (seq !== quranAudioLoadSeq) return;
+            const surahNumbers = [...new Set(ayahs.filter(a => a.surah).map(a => a.surah.number))];
+            quranAudioQueue = surahNumbers.map(n => quranQalunSurahAudioUrl(n));
+        } else {
+            const ayahs = await quranFetchHizbEdition(hizb, 'ar.alafasy');
+            if (seq !== quranAudioLoadSeq) return;
+            quranAudioQueue = ayahs.map(a => a.audio).filter(Boolean);
+        }
         quranAudioIdx = 0;
         quranAudioPlaying = true;
         quranPlayNext();
     } catch (e) {
         if (seq !== quranAudioLoadSeq) return;
-        document.getElementById('quran-play').textContent = t('quran_play_btn');
+        quranAudioPlaying = false;
+        quranUpdatePlayBtnLabel();
         document.getElementById('quran-audio-status').textContent = t('quran_audio_error');
     }
 }
@@ -3535,6 +3621,15 @@ function populateQuranHizbSelect() {
 }
 
 function initQuranSection() {
+    const readingSelect = document.getElementById('quran-reading-select');
+    readingSelect.value = quranReading;
+    readingSelect.onchange = () => quranSetReading(readingSelect.value);
+    const reciterSelect = document.getElementById('quran-qalun-reciter-select');
+    if (reciterSelect) {
+        reciterSelect.value = quranQalunReciter;
+        reciterSelect.onchange = () => quranSetQalunReciter(reciterSelect.value);
+    }
+    quranSetReading(quranReading); // يضبط ملاحظة قالون والزر عند الإقلاع، دون إعادة تحميل نص غير مفتوح بعد
     populateQuranHizbSelect();
     const select = document.getElementById('quran-hizb-select');
     const today = quranTodayHizb();
