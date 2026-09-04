@@ -225,9 +225,18 @@
             font-weight: 700;
         }
         .salat-ayah-ref {
-            font-family: 'Amiri', serif; font-size: 13px; color: #6fe6b0;
+            font-family: 'Amiri', serif; color: #6fe6b0;
             text-align: center; direction: rtl; display: none; order: 4;
+            max-width: 340px; max-height: 30vh; overflow-y: auto;
+        }
+        .salat-ayah-ref .salat-ayah-label {
+            display: block; font-size: 13px;
             text-shadow: 0 0 8px rgba(111,230,176,0.4);
+            margin-bottom: 6px;
+        }
+        .salat-ayah-ref .salat-ayah-full {
+            display: block; font-size: 19px; line-height: 1.9;
+            color: var(--gold); text-shadow: 0 0 10px rgba(255,215,0,0.3);
         }
 
         /* عداد الركعات: تكبير صوتي + وضعية الهاتف */
@@ -2226,6 +2235,7 @@ const SURAH_NAMES = "الفاتحة~البقرة~ال عمران~النساء~ا
 let QURAN_VERSES = null;      // [{c, v, t}] بترتيب المصحف الكامل
 let QURAN_WORDS = null;       // [{n, c, v}] كل كلمات القرآن منمّطة، بترتيب المصحف
 let QURAN_WORD_INDEX = null;  // Map: كلمة منمّطة -> [مواضع في QURAN_WORDS]
+let QURAN_VERSE_MAP = null;   // Map: "رقم_السورة:رقم_الآية" -> موضعها في QURAN_VERSES
 
 // ينمّط كلمة عربية لتسهيل المطابقة مع نص التعرف الصوتي (يزيل التشكيل ويوحّد
 // صور الألف/الياء/التاء المربوطة/الهمزة التي كثيراً ما يخطئ فيها التعرف الصوتي).
@@ -2256,6 +2266,7 @@ function buildQuranIndex() {
     QURAN_VERSES = [];
     QURAN_WORDS = [];
     QURAN_WORD_INDEX = new Map();
+    QURAN_VERSE_MAP = new Map();
     const lines = QURAN_COMPACT.split('\n');
     for (const line of lines) {
         const sep = line.indexOf('|');
@@ -2263,6 +2274,7 @@ function buildQuranIndex() {
         const verses = line.slice(sep + 1).split('~');
         verses.forEach((t, idx) => {
             const v = idx + 1;
+            QURAN_VERSE_MAP.set(`${c}:${v}`, QURAN_VERSES.length);
             QURAN_VERSES.push({ c, v, t });
             const words = tokenizeArabicWithOffsets(t);
             for (const w of words) {
@@ -2311,6 +2323,17 @@ function findAyahMatch(transcriptWords) {
     };
 }
 
+// يُرجع النص الكامل للآية (أو الآيات) المتطابقة، اعتماداً على موضعها في
+// QURAN_VERSES (وليس فقط المقطع الملتقط صوتياً)، لعرضها كاملة على الشاشة.
+function ayahFullText(m) {
+    if (!QURAN_VERSE_MAP) return '';
+    const startGi = QURAN_VERSE_MAP.get(`${m.chapterStart}:${m.verseStart}`);
+    const endGi = QURAN_VERSE_MAP.get(`${m.chapterEnd}:${m.verseEnd}`);
+    if (startGi === undefined || endGi === undefined) return '';
+    const lo = Math.min(startGi, endGi), hi = Math.max(startGi, endGi);
+    return QURAN_VERSES.slice(lo, hi + 1).map(v => v.t).join(' ');
+}
+
 function ayahRefLabel(m) {
     const nameStart = SURAH_NAMES[m.chapterStart - 1] || '';
     if (m.chapterStart === m.chapterEnd && m.verseStart === m.verseEnd) {
@@ -2326,12 +2349,16 @@ function ayahRefLabel(m) {
 // ─── عداد الركعات: مرساة صوتية واحدة لكل ركعة (بلا أي اعتماد على "الله أكبر") ─
 const RAKAT_ORDER = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
 const RAKAT_COUNTS = { fajr: 2, dhuhr: 4, asr: 4, maghrib: 3, isha: 4 };
-// TAKBIR_PATTERNS: للعرض المرئي فقط (إضاءة الكلام المتعرَّف عليه في الشاشة
-// الحيّة) — لا تُستخدم إطلاقاً لعدّ الركعات بعد الآن.
+// TAKBIR_PATTERNS: تُستخدم للعرض المرئي (إضاءة الكلام المتعرَّف عليه في
+// الشاشة الحيّة) دائماً، وأيضاً كمرساة العدّ الوحيدة في "وضع المنزل"
+// (rakatState.homeMode = true، أي لم يُكتشف مسجد مسجّل قريب) — كل ظهور
+// واحد لـ"الله أكبر" = ركعة كاملة واحدة في هذه الحالة (انظر countAnchors).
 const TAKBIR_PATTERNS = [/الله\s*اكبر/gi, /الله\s*أكبر/gi, /allahu?\s*akbar/gi];
-// مرساة العدّ الوحيدة: تُقال مرة واحدة فقط في كل ركعة، عند القيام من الركوع —
-// "سمع الله لمن حمده" (بدء الرفع) أو "ربنا ولك الحمد" (الاعتدال قائماً) — كل
-// ظهور لإحداهما = ركعة كاملة واحدة. لا صلة لهذه المرساة بـ"الله أكبر" إطلاقاً.
+// مرساة العدّ داخل المسجد (وضع المسجد، hasRealIqama = true): تُقال مرة واحدة
+// فقط في كل ركعة، عند القيام من الركوع — "سمع الله لمن حمده" (بدء الرفع) أو
+// "ربنا ولك الحمد" (الاعتدال قائماً) — كل ظهور لإحداهما = ركعة كاملة واحدة.
+// في وضع المنزل (homeMode)، هذه المرساة لا تُستخدم للعدّ — يُستخدم التكبير
+// (TAKBIR_PATTERNS) بدلاً منها، انظر startOneRecognitionCycle.
 const SAMIA_PATTERNS = [
     /الله\s*لمن\s*حمده/gi, /سمع\s*الله\s*لمن\s*حمده/gi,
     /ربنا\s*ولك\s*الحمد/gi, /ربنا\s*لك\s*الحمد/gi
@@ -2352,6 +2379,11 @@ let rakatState = {
     naflCount: 0,
     inFardhWindow: false,
     hasRealIqama: false,
+    // homeMode: true عندما لا يُكتشف مسجد مسجّل قريب (hasRealIqama = false) —
+    // في هذه الحالة يتبدّل عدّ الركعات تلقائياً من مرساة "سمع الله لمن حمده"
+    // إلى مرساة التكبير "الله أكبر" (انظر TAKBIR_PATTERNS)، لأن الإمام غير
+    // موجود ولا يمكن الاعتماد على نفس التوقيت الصوتي المعتاد داخل المسجد.
+    homeMode: false,
     // ── العدّ التراكمي القابل لإعادة الحساب (بدل الجمع المباشر) ──
     // speechBaseline: عدد الركعات المؤكَّدة من دورات تعرّف صوتي سابقة انتهت.
     // speechCurrentCycleTotal: نتيجة إعادة حساب كامل نص الدورة الجارية من الصفر
@@ -2403,10 +2435,12 @@ function requestMicOnce() {
 // الصيغتين تُقالان غالباً متتاليتين لنفس لحظة القيام من الركوع، تُدمَج أي
 // تطابقات متقاربة (فاصل ≤ 40 حرفاً) في ركعة واحدة فقط بدل احتسابها ركعتين.
 const ANCHOR_MERGE_GAP = 40; // أحرف
-function countAnchors(text) {
+// patterns: مرساة العدّ المستخدمة — SAMIA_PATTERNS داخل المسجد (افتراضياً)،
+// أو TAKBIR_PATTERNS في وضع المنزل (homeMode)، حسب استدعاء startOneRecognitionCycle.
+function countAnchors(text, patterns = SAMIA_PATTERNS) {
     if (!text) return 0;
     const positions = [];
-    for (const re of SAMIA_PATTERNS) {
+    for (const re of patterns) {
         const reg = new RegExp(re.source, re.flags.includes('g') ? re.flags : re.flags + 'g');
         let m;
         while ((m = reg.exec(text)) !== null) {
@@ -2512,6 +2546,8 @@ async function refreshRakatContext() {
     rakatState.targetRakat = RAKAT_COUNTS[prayerId];
     rakatState.inFardhWindow = inFardhWindow;
     rakatState.hasRealIqama = hasRealIqama;
+    // لا مسجد مسجّل مكتشف قريب ⇒ وضع المنزل (عدّ عبر التكبير بدل "سمع الله لمن حمده")
+    rakatState.homeMode = !hasRealIqama;
 }
 
 function updateRakatUI() {
@@ -2578,7 +2614,9 @@ function updateImamSpeechDisplay(text) {
     if (ayahMatch) {
         matches.push({ start: ayahMatch.start, end: ayahMatch.end, cls: 'glow-ayah' });
         if (refEl) {
-            refEl.textContent = ayahRefLabel(ayahMatch);
+            const fullText = ayahFullText(ayahMatch);
+            refEl.innerHTML = `<span class="salat-ayah-label">${escapeHtml(ayahRefLabel(ayahMatch))}</span>`
+                + (fullText ? `<span class="salat-ayah-full">${escapeHtml(fullText)}</span>` : '');
             refEl.style.display = 'block';
         }
     } else if (refEl) {
@@ -2669,11 +2707,14 @@ function startOneRecognitionCycle() {
                 interimText += transcript + ' ';
             }
         }
+        // مرساة العدّ الفعلية: التكبير في وضع المنزل (لا مسجد مسجّل مكتشف)،
+        // أو "سمع الله لمن حمده" / "ربنا ولك الحمد" داخل المسجد (الوضع الافتراضي).
+        const countingPatterns = rakatState.homeMode ? TAKBIR_PATTERNS : SAMIA_PATTERNS;
         // finalCount: عدد الركعات المكتملة ضمن النص المؤكَّد (final) فقط —
         // يُعتمَد للتثبيت الدائم. interimCount: يشمل النص المؤقّت أيضاً، يُستخدم
         // فقط لعرض حي تقديري (recomputeRakatState) دون تثبيته في القاعدة.
-        const finalCount = countAnchors(pendingFinalText);
-        const interimCount = countAnchors(pendingFinalText + interimText) - finalCount;
+        const finalCount = countAnchors(pendingFinalText, countingPatterns);
+        const interimCount = countAnchors(pendingFinalText + interimText, countingPatterns) - finalCount;
 
         rakatState.speechCurrentCycleTotal = finalCount + Math.max(0, interimCount);
         recomputeRakatState();
@@ -2737,7 +2778,9 @@ function startRakatListening() {
     const okSpeech = startRakatSpeech();
     if (!okSpeech) return false;
     rakatState.active = true;
-    setRakatStatus('🎙️ الاستماع نشط — تحدث بصوت التكبير أثناء الصلاة', false);
+    setRakatStatus(rakatState.homeMode
+        ? '🏠 وضع المنزل — الاستماع نشط، العدّ عبر تكبير "الله أكبر"'
+        : '🕌 وضع المسجد — الاستماع نشط، العدّ عبر "سمع الله لمن حمده"', false);
     updateRakatUI();
     if (rakatState.contextInterval) clearInterval(rakatState.contextInterval);
     rakatState.contextInterval = setInterval(() => {
@@ -2753,7 +2796,9 @@ async function checkAutoStartRakat() {
     if (!hasMicBeenAsked()) return; // ننتظر إذن المستخدم مرة واحدة أولاً (زر مخصص أو التشغيل اليدوي)
     await refreshRakatContext();
     if (!rakatState.prayerId || !rakatState.inFardhWindow) return;
-    if (!rakatState.hasRealIqama) return; // لسنا داخل مسجد فعلياً (المسافة > 0 كم) — لا تفعيل تلقائي
+    // لسنا داخل مسجد فعلياً (المسافة > 0 كم) ⇒ وضع المنزل: التفعيل التلقائي
+    // يبقى قائماً، لكن العدّ يتحوّل إلى مرساة التكبير "الله أكبر" بدل "سمع
+    // الله لمن حمده" (انظر rakatState.homeMode و startOneRecognitionCycle)
     const key = rakatState.prayerId + '_' + new Date().toDateString();
     if (rakatState.autoStartedKey === key) return; // تم استهلاك هذه الصلاة (تلقائياً أو يدوياً)
     rakatState.autoStartedKey = key;
