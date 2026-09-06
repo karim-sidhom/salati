@@ -227,16 +227,26 @@
         .salat-ayah-ref {
             font-family: 'Amiri', serif; color: #6fe6b0;
             text-align: center; direction: rtl; display: none; order: 4;
-            max-width: 340px; max-height: 30vh; overflow-y: auto;
+            max-width: 92vw; width: 420px; max-height: 46vh; overflow-y: auto;
+            padding: 4px 6px;
         }
         .salat-ayah-ref .salat-ayah-label {
-            display: block; font-size: 13px;
+            display: block; font-size: 15px;
             text-shadow: 0 0 8px rgba(111,230,176,0.4);
-            margin-bottom: 6px;
+            margin-bottom: 8px; font-weight: 700;
         }
         .salat-ayah-ref .salat-ayah-full {
-            display: block; font-size: 19px; line-height: 1.9;
-            color: var(--gold); text-shadow: 0 0 10px rgba(255,215,0,0.3);
+            display: block; font-size: 27px; line-height: 2.1;
+            color: var(--gold); text-shadow: 0 0 12px rgba(255,215,0,0.35);
+        }
+        .salat-ayah-ref .salat-ayah-num {
+            display: inline-block; color: #6fe6b0; font-size: 15px;
+            margin: 0 2px; text-shadow: 0 0 8px rgba(111,230,176,0.5);
+        }
+        .salat-ayah-ref .salat-takbir-full {
+            display: block; font-size: 34px; line-height: 1.6;
+            color: var(--gold); text-shadow: 0 0 16px rgba(255,215,0,0.5);
+            font-weight: 700;
         }
 
         /* عداد الركعات: تكبير صوتي + وضعية الهاتف */
@@ -2323,15 +2333,31 @@ function findAyahMatch(transcriptWords) {
     };
 }
 
-// يُرجع النص الكامل للآية (أو الآيات) المتطابقة، اعتماداً على موضعها في
-// QURAN_VERSES (وليس فقط المقطع الملتقط صوتياً)، لعرضها كاملة على الشاشة.
-function ayahFullText(m) {
-    if (!QURAN_VERSE_MAP) return '';
+// يُرجع الآية (أو الآيات) المتطابقة فعلياً + آيتين إضافيتين بعدها دائماً
+// (بحسب ترتيبها في QURAN_VERSES)، لعرضها كاملة ومسبقاً على الشاشة حتى قبل
+// أن يتلوها الإمام، فلا تختفي الآية الحالية فجأة عند الانتقال للتالية.
+const AYAH_LOOKAHEAD_COUNT = 2;
+function ayahDisplaySegments(m) {
+    if (!QURAN_VERSE_MAP) return [];
     const startGi = QURAN_VERSE_MAP.get(`${m.chapterStart}:${m.verseStart}`);
     const endGi = QURAN_VERSE_MAP.get(`${m.chapterEnd}:${m.verseEnd}`);
-    if (startGi === undefined || endGi === undefined) return '';
-    const lo = Math.min(startGi, endGi), hi = Math.max(startGi, endGi);
-    return QURAN_VERSES.slice(lo, hi + 1).map(v => v.t).join(' ');
+    if (startGi === undefined || endGi === undefined) return [];
+    const lo = Math.min(startGi, endGi);
+    const hi = Math.min(Math.max(startGi, endGi) + AYAH_LOOKAHEAD_COUNT, QURAN_VERSES.length - 1);
+    return QURAN_VERSES.slice(lo, hi + 1);
+}
+
+// يبني HTML آمن (مُهرَّب مسبقاً) للآية المتلوة + الآيتين التاليتين، مع ترقيم
+// كل آية على حدة، جاهز للحقن المباشر في salat-ayah-full دون تهريب إضافي.
+function ayahDisplayHtml(m) {
+    const segs = ayahDisplaySegments(m);
+    if (!segs.length) return '';
+    return segs.map(v => `${escapeHtml(v.t)}<span class="salat-ayah-num">﴿${v.v}﴾</span>`).join(' ');
+}
+
+// نُبقي على الدالة القديمة (نص خام بلا HTML) لأي استخدام آخر محتمل مستقبلاً.
+function ayahFullText(m) {
+    return ayahDisplaySegments(m).map(v => v.t).join(' ');
 }
 
 function ayahRefLabel(m) {
@@ -2588,6 +2614,9 @@ function setRakatStatus(msg, isError) {
 function escapeHtml(s) {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
+// حالة العرض "اللاصقة": تُبقي آخر آية (أو تكبير) ظاهرة على الشاشة دون
+// اختفاء فوري، ولا تتبدّل إلا عند تلاوة آية أخرى مختلفة أو قول "الله أكبر".
+let salatDisplaySticky = { type: null, key: null };
 function updateImamSpeechDisplay(text) {
     const el = document.getElementById('salat-live-transcript');
     const refEl = document.getElementById('salat-ayah-ref');
@@ -2595,6 +2624,7 @@ function updateImamSpeechDisplay(text) {
     if (!text) {
         el.textContent = '';
         if (refEl) { refEl.textContent = ''; refEl.style.display = 'none'; }
+        salatDisplaySticky = { type: null, key: null };
         return;
     }
     const allPatterns = [...TAKBIR_PATTERNS, ...SAMIA_PATTERNS, ...SALAM_PATTERNS];
@@ -2611,17 +2641,35 @@ function updateImamSpeechDisplay(text) {
     // مطابقة الآيات القرآنية المتلوة فعلياً (وليس فقط أنماط التكبير/الأنكر)
     const transcriptWords = tokenizeArabicWithOffsets(text);
     const ayahMatch = findAyahMatch(transcriptWords);
+    // نتحقق أيضاً من وجود "الله أكبر" في المقطع الحالي، لعرضها إن لم تُتلَ آية
+    const hasTakbirNow = TAKBIR_PATTERNS.some(re => {
+        const reg = new RegExp(re.source, re.flags.includes('g') ? re.flags : re.flags + 'g');
+        return reg.test(text);
+    });
+
     if (ayahMatch) {
         matches.push({ start: ayahMatch.start, end: ayahMatch.end, cls: 'glow-ayah' });
-        if (refEl) {
-            const fullText = ayahFullText(ayahMatch);
+        // مفتاح الآية المتلوة: يتغيّر فقط عند الانتقال فعلاً لآية أخرى، فلا
+        // يُعاد بناء العرض في كل onresult ما دامت نفس الآية لا تزال قيد التلاوة
+        const key = `ayah:${ayahMatch.chapterStart}:${ayahMatch.verseStart}-${ayahMatch.chapterEnd}:${ayahMatch.verseEnd}`;
+        if (refEl && salatDisplaySticky.key !== key) {
+            const fullHtml = ayahDisplayHtml(ayahMatch);
             refEl.innerHTML = `<span class="salat-ayah-label">${escapeHtml(ayahRefLabel(ayahMatch))}</span>`
-                + (fullText ? `<span class="salat-ayah-full">${escapeHtml(fullText)}</span>` : '');
+                + (fullHtml ? `<span class="salat-ayah-full">${fullHtml}</span>` : '');
             refEl.style.display = 'block';
+            salatDisplaySticky = { type: 'ayah', key };
         }
-    } else if (refEl) {
-        refEl.style.display = 'none';
+    } else if (hasTakbirNow) {
+        if (refEl && salatDisplaySticky.key !== 'takbir') {
+            refEl.innerHTML = `<span class="salat-ayah-label">🕋 تكبير</span>`
+                + `<span class="salat-takbir-full">الله أكبر</span>`;
+            refEl.style.display = 'block';
+            salatDisplaySticky = { type: 'takbir', key: 'takbir' };
+        }
     }
+    // ملاحظة: لا يوجد "else" لإخفاء الصندوق — يبقى آخر ما عُرض ظاهراً على
+    // الدوام حتى تُتلى آية جديدة مختلفة أو يُقال تكبير جديد، تنفيذاً لطلب
+    // إبقاء الآية معروضة باستمرار بدل اختفائها بمجرد خروجها من نص المقطع.
     matches.sort((a, b) => a.start - b.start || (a.cls === 'glow-ayah' ? -1 : 1));
     // دمج التطابقات المتداخلة أو المتلاصقة (تُغلَّب آية القرآن عند التداخل)
     const merged = [];
