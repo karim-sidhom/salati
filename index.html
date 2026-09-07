@@ -1888,7 +1888,7 @@ let mawaqitZoneCache = null; // { key: "lat,lon", promise }
 // mawaqit-worker.js fourni, puis colle son URL ici (ex:
 // 'https://mawaqit.lordsidhom78.workers.dev'). Tant que c'est vide, l'app
 // utilise les proxies publics ci-dessous (instables, souvent bloqués/429).
-const MAWAQIT_WORKER_URL = '';
+const MAWAQIT_WORKER_URL = 'https://1cd83c2a-mawaqit-proxy.lordsidhom78.workers.dev';
 
 // Liste de proxies CORS gratuits utilisables depuis n'importe quel site (pas seulement localhost).
 // corsproxy.io a été retiré : depuis 2026 son offre gratuite ne fonctionne plus que
@@ -2372,19 +2372,20 @@ function ayahRefLabel(m) {
     return `📖 ${nameStart} ${m.verseStart} → ${nameEnd} ${m.verseEnd}`;
 }
 
-// ─── عداد الركعات: مرساة صوتية واحدة لكل ركعة (بلا أي اعتماد على "الله أكبر") ─
+// ─── عداد الركعات: يعتمد حصرياً على تكبيرات "الله أكبر" — كل 5 تكبيرات
+// مسموعة ومؤكَّدة = ركعة كاملة واحدة (انظر RAKAT_TAKBIR_PER_RAKAT وcountAnchors) ─
 const RAKAT_ORDER = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
 const RAKAT_COUNTS = { fajr: 2, dhuhr: 4, asr: 4, maghrib: 3, isha: 4 };
-// TAKBIR_PATTERNS: تُستخدم للعرض المرئي (إضاءة الكلام المتعرَّف عليه في
-// الشاشة الحيّة) دائماً، وأيضاً كمرساة العدّ الوحيدة في "وضع المنزل"
-// (rakatState.homeMode = true، أي لم يُكتشف مسجد مسجّل قريب) — كل ظهور
-// واحد لـ"الله أكبر" = ركعة كاملة واحدة في هذه الحالة (انظر countAnchors).
+// عدد تكبيرات "الله أكبر" اللازمة لاحتساب ركعة واحدة كاملة. يُستخدم في
+// recomputeRakatState لتحويل إجمالي عدد التكبيرات المسموعة إلى عدد ركعات.
+const RAKAT_TAKBIR_PER_RAKAT = 5;
+// TAKBIR_PATTERNS: مرساة العدّ الوحيدة، في وضع المسجد ووضع المنزل على حدّ
+// سواء — كل ظهور واحد لـ"الله أكبر" يُحتسَب كتكبيرة واحدة (انظر countAnchors)،
+// وكل 5 تكبيرات مُحتسَبة تُشكّل ركعة كاملة واحدة. تُستخدم أيضاً للعرض المرئي
+// (إضاءة الكلام المتعرَّف عليه في الشاشة الحيّة).
 const TAKBIR_PATTERNS = [/الله\s*اكبر/gi, /الله\s*أكبر/gi, /allahu?\s*akbar/gi];
-// مرساة العدّ داخل المسجد (وضع المسجد، hasRealIqama = true): تُقال مرة واحدة
-// فقط في كل ركعة، عند القيام من الركوع — "سمع الله لمن حمده" (بدء الرفع) أو
-// "ربنا ولك الحمد" (الاعتدال قائماً) — كل ظهور لإحداهما = ركعة كاملة واحدة.
-// في وضع المنزل (homeMode)، هذه المرساة لا تُستخدم للعدّ — يُستخدم التكبير
-// (TAKBIR_PATTERNS) بدلاً منها، انظر startOneRecognitionCycle.
+// مرساة "سمع الله لمن حمده" / "ربنا ولك الحمد" — لا تُستخدم للعدّ (اُلغي
+// اعتمادها)، تبقى فقط لإضاءة الكلام المتعرَّف عليه في الشاشة الحيّة أثناء الصلاة.
 const SAMIA_PATTERNS = [
     /الله\s*لمن\s*حمده/gi, /سمع\s*الله\s*لمن\s*حمده/gi,
     /ربنا\s*ولك\s*الحمد/gi, /ربنا\s*لك\s*الحمد/gi
@@ -2405,13 +2406,13 @@ let rakatState = {
     naflCount: 0,
     inFardhWindow: false,
     hasRealIqama: false,
-    // homeMode: true عندما لا يُكتشف مسجد مسجّل قريب (hasRealIqama = false) —
-    // في هذه الحالة يتبدّل عدّ الركعات تلقائياً من مرساة "سمع الله لمن حمده"
-    // إلى مرساة التكبير "الله أكبر" (انظر TAKBIR_PATTERNS)، لأن الإمام غير
-    // موجود ولا يمكن الاعتماد على نفس التوقيت الصوتي المعتاد داخل المسجد.
+    // homeMode: true عندما لا يُكتشف مسجد مسجّل قريب (hasRealIqama = false).
+    // لا يُغيّر مرساة العدّ (التكبير يُستخدم دائماً في الحالتين)، بل يُستخدم
+    // فقط لتحديد نص الحالة المعروضة للمستخدم (🏠 منزل / 🕌 مسجد).
     homeMode: false,
     // ── العدّ التراكمي القابل لإعادة الحساب (بدل الجمع المباشر) ──
-    // speechBaseline: عدد الركعات المؤكَّدة من دورات تعرّف صوتي سابقة انتهت.
+    // speechBaseline: إجمالي عدد تكبيرات "الله أكبر" المؤكَّدة من دورات تعرّف
+    // صوتي سابقة انتهت (وليس عدد الركعات مباشرة — انظر recomputeRakatState).
     // speechCurrentCycleTotal: نتيجة إعادة حساب كامل نص الدورة الجارية من الصفر
     // في كل onresult — يُستبدل لا يُضاف، فإن "فاتت" مرساة سابقاً ثم ظهرت في نص
     // مُصحَّح لاحقاً، يُعاد احتسابها تلقائياً.
@@ -2456,14 +2457,14 @@ function requestMicOnce() {
     } catch (e) { markMicAsked(); }
 }
 
-// يُرجع عدد الركعات المكتملة الموجودة في النص، بالاعتماد فقط على مرساة
-// "سمع الله لمن حمده" / "ربنا ولك الحمد" (بلا أي علاقة بـ"الله أكبر"). بما أن
-// الصيغتين تُقالان غالباً متتاليتين لنفس لحظة القيام من الركوع، تُدمَج أي
-// تطابقات متقاربة (فاصل ≤ 40 حرفاً) في ركعة واحدة فقط بدل احتسابها ركعتين.
+// يُرجع عدد تكبيرات "الله أكبر" الموجودة في النص (وليس عدد الركعات مباشرة —
+// كل 5 تكبيرات تُشكّل ركعة واحدة، انظر RAKAT_TAKBIR_PER_RAKAT وrecomputeRakatState).
+// تُدمَج أي تطابقات متقاربة جداً (فاصل ≤ 40 حرفاً) في تكبيرة واحدة فقط، لمنع
+// احتساب نفس التكبيرة مرتين إذا التقطها التعرّف الصوتي بصيغتين متتاليتين.
 const ANCHOR_MERGE_GAP = 40; // أحرف
-// patterns: مرساة العدّ المستخدمة — SAMIA_PATTERNS داخل المسجد (افتراضياً)،
-// أو TAKBIR_PATTERNS في وضع المنزل (homeMode)، حسب استدعاء startOneRecognitionCycle.
-function countAnchors(text, patterns = SAMIA_PATTERNS) {
+// patterns: مرساة العدّ المستخدمة — TAKBIR_PATTERNS ("الله أكبر") افتراضياً،
+// وهي المرساة الوحيدة المعتمدة الآن لحساب الركعات (انظر startOneRecognitionCycle).
+function countAnchors(text, patterns = TAKBIR_PATTERNS) {
     if (!text) return 0;
     const positions = [];
     for (const re of patterns) {
@@ -2704,7 +2705,11 @@ function updateImamSpeechDisplay(text) {
 // عليها أول مرة، وظهرت لاحقاً بشكل صحيح في نص مُعاد تحليله، يُصحَّح العدّ
 // تلقائياً دون تدخّل يدوي، صعوداً أو نزولاً.
 function recomputeRakatState() {
-    const rakatsCompleted = rakatState.speechBaseline + rakatState.speechCurrentCycleTotal;
+    // speechBaseline/speechCurrentCycleTotal يخزّنان الآن إجمالي عدد تكبيرات
+    // "الله أكبر" المسموعة (وليس عدد الركعات مباشرة) — كل 5 تكبيرات = ركعة
+    // واحدة كاملة (RAKAT_TAKBIR_PER_RAKAT)، فتُقسَّم القيمة الإجمالية عليها.
+    const totalTakbirs = rakatState.speechBaseline + rakatState.speechCurrentCycleTotal;
+    const rakatsCompleted = Math.floor(totalTakbirs / RAKAT_TAKBIR_PER_RAKAT);
     // مع وجود إقامة حقيقية وقبل دخول وقتها: نافلة قبلية تُحتسب بحرية بلا قيد.
     const preIqamaNafl = rakatState.hasRealIqama && !rakatState.inFardhWindow;
     if (preIqamaNafl) {
@@ -2755,10 +2760,11 @@ function startOneRecognitionCycle() {
                 interimText += transcript + ' ';
             }
         }
-        // مرساة العدّ الفعلية: التكبير في وضع المنزل (لا مسجد مسجّل مكتشف)،
-        // أو "سمع الله لمن حمده" / "ربنا ولك الحمد" داخل المسجد (الوضع الافتراضي).
-        const countingPatterns = rakatState.homeMode ? TAKBIR_PATTERNS : SAMIA_PATTERNS;
-        // finalCount: عدد الركعات المكتملة ضمن النص المؤكَّد (final) فقط —
+        // مرساة العدّ الفعلية: التكبير "الله أكبر" حصرياً، في وضع المسجد ووضع
+        // المنزل على حدّ سواء — كل تكبيرة مؤكَّدة تُضاف للإجمالي، وكل 5
+        // تكبيرات (RAKAT_TAKBIR_PER_RAKAT) تُشكّل ركعة كاملة (recomputeRakatState).
+        const countingPatterns = TAKBIR_PATTERNS;
+        // finalCount: عدد التكبيرات المؤكَّدة ضمن النص المؤكَّد (final) فقط —
         // يُعتمَد للتثبيت الدائم. interimCount: يشمل النص المؤقّت أيضاً، يُستخدم
         // فقط لعرض حي تقديري (recomputeRakatState) دون تثبيته في القاعدة.
         const finalCount = countAnchors(pendingFinalText, countingPatterns);
@@ -2827,8 +2833,8 @@ function startRakatListening() {
     if (!okSpeech) return false;
     rakatState.active = true;
     setRakatStatus(rakatState.homeMode
-        ? '🏠 وضع المنزل — الاستماع نشط، العدّ عبر تكبير "الله أكبر"'
-        : '🕌 وضع المسجد — الاستماع نشط، العدّ عبر "سمع الله لمن حمده"', false);
+        ? '🏠 وضع المنزل — الاستماع نشط، العدّ عبر التكبير (5 تكبيرات = ركعة)'
+        : '🕌 وضع المسجد — الاستماع نشط، العدّ عبر التكبير (5 تكبيرات = ركعة)', false);
     updateRakatUI();
     if (rakatState.contextInterval) clearInterval(rakatState.contextInterval);
     rakatState.contextInterval = setInterval(() => {
@@ -2845,8 +2851,8 @@ async function checkAutoStartRakat() {
     await refreshRakatContext();
     if (!rakatState.prayerId || !rakatState.inFardhWindow) return;
     // لسنا داخل مسجد فعلياً (المسافة > 0 كم) ⇒ وضع المنزل: التفعيل التلقائي
-    // يبقى قائماً، لكن العدّ يتحوّل إلى مرساة التكبير "الله أكبر" بدل "سمع
-    // الله لمن حمده" (انظر rakatState.homeMode و startOneRecognitionCycle)
+    // يبقى قائماً، والعدّ عبر التكبير "الله أكبر" كالمعتاد (لا فرق في مرساة
+    // العدّ بين وضع المنزل ووضع المسجد — انظر rakatState.homeMode)
     const key = rakatState.prayerId + '_' + new Date().toDateString();
     if (rakatState.autoStartedKey === key) return; // تم استهلاك هذه الصلاة (تلقائياً أو يدوياً)
     rakatState.autoStartedKey = key;
