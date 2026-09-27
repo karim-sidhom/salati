@@ -136,6 +136,11 @@
         .mawaqit-prayer.current .mawaqit-prayer-time { color: var(--gold); }
         .mawaqit-prayer.current .mawaqit-prayer-name { color: var(--gold); }
         .mawaqit-prayer-adhan { font-size: 8px; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 1px; opacity: 0.75; }
+.mawaqit-jumua { margin-top: 6px; padding-top: 5px; border-top: 1px dashed rgba(255,229,102,0.12); display: flex; justify-content: center; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.mawaqit-jumua-name { font-size: 9.5px; color: var(--muted); }
+.mawaqit-jumua-time { font-size: 11px; font-weight: 700; color: var(--teal); font-variant-numeric: tabular-nums; }
+.mawaqit-jumua.friday .mawaqit-jumua-name { color: var(--gold); }
+.mawaqit-jumua.current .mawaqit-jumua-time { color: var(--gold); }
         .mawaqit-loading { font-size: 10px; color: var(--muted); font-style: italic; }
         .mawaqit-error { font-size: 10px; color: rgba(224,96,96,0.7); }
         .mosque-item-top { display: flex; align-items: center; gap: 12px; width: 100%; }
@@ -2020,6 +2025,10 @@ async function attachMawaqitTimesFromZone(container, mosque, zonePromise) {
     renderMawaqitTimes(mawaqitBlock, {
         times: best.times || [],
         iqama: best.iqama || [],
+        jumua: best.jumua || null,
+        jumua2: best.jumua2 || null,
+        jumua3: best.jumua3 || null,
+        jumuaAsDuhr: !!best.jumuaAsDuhr,
         slug: best.slug || '',
         name: best.name || best.label || '',
         url: best.slug ? `https://mawaqit.net/fr/${best.slug}` : '',
@@ -2032,18 +2041,13 @@ function renderMawaqitTimes(container, data) {
     if (!data || !data.times || !data.times.length) {
         const err = document.createElement('div');
         err.className = 'mawaqit-error';
-        err.textContent = 'لم يتم العثور على مواقيت في mawaqit.net';
+        err.textContent = 'لم يتم العثور على مواقيت لهذا المسجد';
         container.appendChild(err);
         return;
     }
     const label = document.createElement('div'); label.className = 'mawaqit-label';
-    const logoSpan = document.createElement('span'); logoSpan.textContent = '🕌 وقت الإقامة (mawaqit.net)';
+    const logoSpan = document.createElement('span'); logoSpan.textContent = '🕌 وقت الإقامة';
     label.appendChild(logoSpan);
-    if (data.url) {
-        const link = document.createElement('a'); link.href = data.url; link.target = '_blank'; link.rel = 'noopener';
-        link.textContent = '← صفحة المسجد';
-        label.appendChild(link);
-    }
     container.appendChild(label);
 
     const grid = document.createElement('div'); grid.className = 'mawaqit-grid';
@@ -2087,6 +2091,28 @@ function renderMawaqitTimes(container, data) {
         grid.appendChild(cell);
     });
     container.appendChild(grid);
+
+    // ── صلاة الجمعة (mawaqit: jumua / jumua2 / jumua3 / jumuaAsDuhr) ──
+    const jumuaList = [data.jumua, data.jumua2, data.jumua3]
+        .filter(j => typeof j === 'string' && j.includes(':'));
+    if (!jumuaList.length && data.jumuaAsDuhr && adhanTimes[1]) jumuaList.push(adhanTimes[1]);
+    if (jumuaList.length) {
+        const isFriday = now.getDay() === 5;
+        const jRow = document.createElement('div');
+        jRow.className = 'mawaqit-jumua' + (isFriday ? ' friday' : '');
+        const jn = document.createElement('span'); jn.className = 'mawaqit-jumua-name';
+        jn.textContent = '🕌 صلاة الجمعة';
+        const jt = document.createElement('span'); jt.className = 'mawaqit-jumua-time';
+        jt.textContent = jumuaList.join(' · ');
+        jRow.append(jn, jt);
+        // يوم الجمعة: الجمعة تحلّ محلّ الظهر في الإبراز
+        if (isFriday && activeIdx === 1) {
+            const dhuhrCell = grid.children[1];
+            if (dhuhrCell) dhuhrCell.classList.remove('current');
+            jRow.classList.add('current');
+        }
+        container.appendChild(jRow);
+    }
 }
 
 // Convert 'HH:MM' to minutes-since-midnight, or null if invalid
@@ -2899,7 +2925,7 @@ function renderMosques(items, radiusKm, shown = 5, placeLabel = '', onExpand = n
         // Mawaqit times block (bottom row, full width)
         const mawaqitBlock = document.createElement('div'); mawaqitBlock.className = 'mawaqit-times';
         const loading = document.createElement('div'); loading.className = 'mawaqit-loading';
-        loading.textContent = 'جاري مطابقة المسجد مع mawaqit.net...';
+        loading.textContent = 'جاري مطابقة المسجد...';
         mawaqitBlock.appendChild(loading);
 
         item.append(top, mawaqitBlock);
