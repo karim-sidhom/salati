@@ -1893,7 +1893,7 @@ let mawaqitZoneCache = null; // { key: "lat,lon", promise }
 // mawaqit-worker.js fourni, puis colle son URL ici (ex:
 // 'https://mawaqit.lordsidhom78.workers.dev'). Tant que c'est vide, l'app
 // utilise les proxies publics ci-dessous (instables, souvent bloqués/429).
-const MAWAQIT_WORKER_URL = 'https://1cd83c2a-mawaqit-proxy.lordsidhom78.workers.dev';
+const MAWAQIT_WORKER_URL = 'https://mawaqit-proxy.lordsidhom78.workers.dev';
 
 // Liste de proxies CORS gratuits utilisables depuis n'importe quel site (pas seulement localhost).
 // corsproxy.io a été retiré : depuis 2026 son offre gratuite ne fonctionne plus que
@@ -1958,6 +1958,18 @@ function writeMawaqitDailyCache(key, mosques) {
     try { localStorage.setItem(mawaqitStorageKey(key), JSON.stringify(mosques)); } catch (e) {}
 }
 
+// Horaires stockés sur le Worker (base mise à jour 24/24) → réponse instantanée.
+// En cas d'échec, l'app repasse sur l'appel direct via fetchJsonViaProxies.
+async function fetchStoredMosques(lat, lon, timeoutMs = 8000) {
+    if (!MAWAQIT_WORKER_URL) throw new Error('no worker');
+    const res = await fetch(`${MAWAQIT_WORKER_URL.replace(/\/$/, '')}/mosques?lat=${lat}&lon=${lon}`, { signal: AbortSignal.timeout(timeoutMs) });
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    const data = await res.json();
+    if (!Array.isArray(data)) throw new Error('bad format');
+    console.log(`[mawaqit] ✅ ${data.length} mosquees depuis la base du Worker (${res.headers.get('X-Source') || '?'})`);
+    return data;
+}
+
 function fetchMawaqitZone(lat, lon) {
     const key = `${lat.toFixed(3)},${lon.toFixed(3)}`;
     if (mawaqitZoneCache && mawaqitZoneCache.key === key) return mawaqitZoneCache.promise;
@@ -1972,7 +1984,11 @@ function fetchMawaqitZone(lat, lon) {
     }
 
     const url = `https://mawaqit.net/api/2.0/mosque/search?lat=${lat}&lon=${lon}&word=&locale=fr&limit=50`;
-    const promise = fetchJsonViaProxies(url)
+    const promise = fetchStoredMosques(lat, lon)
+        .catch(e => {
+            console.warn('[mawaqit] base Worker indisponible — appel direct:', e.message || e);
+            return fetchJsonViaProxies(url);
+        })
         .then(data => {
             const mosques = Array.isArray(data) ? data : (data.mosques || []);
             console.log(`[mawaqit] ${mosques.length} mosquees recuperees de mawaqit.net pour cette zone`);
