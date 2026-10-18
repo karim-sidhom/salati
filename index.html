@@ -1975,6 +1975,97 @@ async function fetchStoredMosques(lat, lon, timeoutMs = 8000) {
     return data;
 }
 
+// ─── Base séparée des écarts adhan → iqama par mosquée ──────────────────────
+// Stockage persistant (localStorage) distinct du cache du jour mawaqit_zone_*.
+// Clé : IQAMA_GAPS_DB_KEY. Format :
+//   { v: 1, mosques: { "<uuid|id|slug>": { n: nom, s: slug, la: lat, lo: lon,
+//       g: [fajr, dhuhr, asr, maghrib, isha]  → écart en minutes (null si inconnu),
+//       t: ['o'|'f'|null ×5]  → 'o' = décalage fixe en minutes, 'f' = heure fixe (écart du jour),
+//       r: [valeurs brutes mawaqit ×5], u: 'YYYY-MM-DD' } } }
+const IQAMA_GAPS_DB_KEY = 'iqama_gaps_db_v1';
+
+function computeIqamaGaps(mosque) {
+    const rawTimes = mosque.times || [];
+    const adhan = rawTimes.length >= 6
+        ? [rawTimes[0], rawTimes[2], rawTimes[3], rawTimes[4], rawTimes[5]]
+        : rawTimes.slice(0, 5);
+    const iqamaRaw = mosque.iqama || [];
+    const g = [], t = [], r = [];
+    for (let i = 0; i < 5; i++) {
+        const raw = iqamaRaw[i];
+        r.push(raw === undefined || raw === null ? null : String(raw));
+        if (raw === undefined || raw === null || String(raw).trim() === '') { g.push(null); t.push(null); continue; }
+        const val = String(raw).trim();
+        if (val.includes(':')) {
+            const a = timeToMinutes(adhan[i]), q = timeToMinutes(val);
+            if (a === null || q === null) { g.push(null); t.push(null); continue; }
+            g.push((q - a + 1440) % 1440); t.push('f');
+        } else {
+            const off = parseInt(val.replace('+', ''), 10);
+            if (Number.isNaN(off)) { g.push(null); t.push(null); continue; }
+            g.push(off); t.push('o');
+        }
+    }
+    return { g, t, r };
+}
+
+function readIqamaGapsDB() {
+    try {
+        const raw = localStorage.getItem(IQAMA_GAPS_DB_KEY);
+        if (!raw) return { v: 1, mosques: {} };
+        const db = JSON.parse(raw);
+        return (db && db.mosques) ? db : { v: 1, mosques: {} };
+    } catch (e) { return { v: 1, mosques: {} }; }
+}
+
+function recordIqamaGaps(mosques) {
+    try {
+        if (!Array.isArray(mosques) || !mosques.length) return;
+        const db = readIqamaGapsDB();
+        const today = new Date().toISOString().slice(0, 10);
+        let changed = 0;
+        for (const m of mosques) {
+            const id = m.uuid || m.id || m.slug;
+            if (!id) continue;
+            const { g, t, r } = computeIqamaGaps(m);
+            if (g.every(x => x === null)) continue;
+            const prev = db.mosques[id];
+            // 'f' (heure fixe) : l'écart varie chaque jour avec l'adhan → on met à jour ; sinon on ne réécrit que si changé
+            if (prev && prev.u === today) continue;
+            db.mosques[id] = {
+                n: m.name || m.label || '', s: m.slug || '',
+                la: parseFloat(m.latitude) || null, lo: parseFloat(m.longitude) || null,
+                g, t, r, u: today
+            };
+            changed++;
+        }
+        if (changed) localStorage.setItem(IQAMA_GAPS_DB_KEY, JSON.stringify(db));
+    } catch (e) { console.warn('[iqama-db] enregistrement impossible:', e.message || e); }
+}
+
+// Accès pour usage ultérieur : IqamaGapsDB.get(id) / .all() / .export()
+const IqamaGapsDB = {
+    get: id => readIqamaGapsDB().mosques[id] || null,
+    all: () => readIqamaGapsDB().mosques,
+    export: () => JSON.stringify(readIqamaGapsDB(), null, 1)
+};
+window.IqamaGapsDB = IqamaGapsDB;
+
+// Envoie au Worker les mosquées trouvées (une fois par zone et par session) pour alimenter la base centrale des écarts.
+const IQAMA_PUSHED_ZONES = new Set();
+function pushMosquesToWorker(key, mosques) {
+    try {
+        if (!MAWAQIT_WORKER_URL || !Array.isArray(mosques) || IQAMA_PUSHED_ZONES.has(key)) return;
+        const slim = mosques
+            .filter(m => m && Array.isArray(m.times) && Array.isArray(m.iqama) && m.iqama.length)
+            .slice(0, 100)
+            .map(m => ({ uuid: m.uuid, id: m.id, slug: m.slug, name: m.name, label: m.label, latitude: m.latitude, longitude: m.longitude, times: m.times, iqama: m.iqama }));
+        if (!slim.length) return;
+        IQAMA_PUSHED_ZONES.add(key);
+        fetch(`${MAWAQIT_WORKER_URL.replace(/\/$/, '')}/ingest`, { method: 'POST', mode: 'no-cors', keepalive: true, headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(slim) }).catch(() => {});
+    } catch (e) {}
+}
+
 function fetchMawaqitZone(lat, lon) {
     const key = `${lat.toFixed(3)},${lon.toFixed(3)}`;
     if (mawaqitZoneCache && mawaqitZoneCache.key === key) return mawaqitZoneCache.promise;
@@ -1983,6 +2074,7 @@ function fetchMawaqitZone(lat, lon) {
     const cached = readMawaqitDailyCache(key);
     if (cached) {
         console.log(`[mawaqit] ${cached.length} mosquees chargees depuis le cache du jour`);
+        recordIqamaGaps(cached);
         const promise = Promise.resolve(cached);
         mawaqitZoneCache = { key, promise };
         return promise;
@@ -1998,6 +2090,8 @@ function fetchMawaqitZone(lat, lon) {
             const mosques = Array.isArray(data) ? data : (data.mosques || []);
             console.log(`[mawaqit] ${mosques.length} mosquees recuperees de mawaqit.net pour cette zone`);
             if (mosques.length) writeMawaqitDailyCache(key, mosques);
+            if (mosques.length) recordIqamaGaps(mosques);
+            if (mosques.length) pushMosquesToWorker(key, mosques);
             if (!mosques.length) {
                 // Résultat vide suspect (proxy en 429/erreur silencieuse par ex.) —
                 // on ne verrouille pas ce point GPS avec une liste vide pour toujours,
