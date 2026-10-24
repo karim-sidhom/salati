@@ -2,6 +2,45 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
+    <script>/*FARHOUM-BRIDGE v1 : actif seulement avec ?bridge=1, n'ajoute rien au fonctionnement normal*/
+(function(){
+  if(location.search.indexOf('bridge=1')<0) return;
+  var APP="salati", QS="amenity=place_of_worship", DEF="\u0645\u0633\u062c\u062f", RADII=[1, 3, 5, 10, 15, 25], BAD=["\u0643\u0646\u064a\u0633\u0629","\u0643\u0627\u062a\u062f\u0631\u0627\u0626\u064a\u0629","\u0643\u0646\u064a\u0633","\u0645\u0639\u0628\u062f","\u062f\u064a\u0631","church","cathedral","chapel","synagogue","temple","monastery","\u00e9glise","eglise","cath\u00e9drale","chapelle","monast\u00e8re","basilique"];
+  function d2r(x){return x*Math.PI/180;}
+  function hav(a,b,c,e){var R=6371,dl=d2r(c-a),dn=d2r(e-b),x=Math.sin(dl/2)*Math.sin(dl/2)+Math.cos(d2r(a))*Math.cos(d2r(c))*Math.sin(dn/2)*Math.sin(dn/2);return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));}
+  function vb(lat,lon,r){var lD=r/111.32,oD=r/(111.32*Math.max(Math.cos(d2r(lat)),0.1));return (lon-oD).toFixed(5)+','+(lat-lD).toFixed(5)+','+(lon+oD).toFixed(5)+','+(lat+lD).toFixed(5);}
+  async function search(lat,lng){
+    for(var i=0;i<RADII.length;i++){
+      var r=RADII[i], ctrl=new AbortController(), t=setTimeout(function(){ctrl.abort();},12000), places;
+      try{
+        var res=await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&'+QS+'&viewbox='+vb(lat,lng,r)+'&bounded=1&limit=50&accept-language=ar',{signal:ctrl.signal});
+        if(!res.ok) return null;
+        places=await res.json();
+      }catch(e){ return null; }finally{ clearTimeout(t); }
+      var best=null;
+      (places||[]).forEach(function(p){
+        var la=parseFloat(p.lat), lo=parseFloat(p.lon); if(isNaN(la)||isNaN(lo)) return;
+        var nm=p.name||(p.display_name&&p.display_name.split(',')[0].trim())||DEF, low=nm.toLowerCase();
+        for(var k=0;k<BAD.length;k++){ if(low.indexOf(BAD[k])>=0) return; }
+        var dk=hav(lat,lng,la,lo); if(dk>r) return;
+        if(!best||dk<best.dk) best={name:nm,lat:la,lng:lo,dk:dk};
+      });
+      if(best) return {name:best.name,lat:best.lat,lng:best.lng,dist:best.dk*1000};
+    }
+    return null;
+  }
+  window.addEventListener('message',function(ev){
+    var d=ev.data; if(!d||d.type!=='app-find') return;
+    var to=(ev.origin&&ev.origin!=='null')?ev.origin:'*';
+    function reply(poi){ try{ ev.source.postMessage({type:'app-res',id:d.id,app:APP,poi:poi},to); }catch(e){} }
+    var la=Number(d.lat), lo=Number(d.lng);
+    if(!isFinite(la)||!isFinite(lo)){ reply(null); return; }
+    search(la,lo).then(reply,function(){ reply(null); });
+  });
+  try{ if(window.parent!==window) window.parent.postMessage({type:'app-ready',app:APP},'*'); }catch(e){}
+  try{ window.stop(); }catch(e){}
+})();
+</script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>مواقيت الصلاة والمساجد التاريخية - LORD</title>
     <link rel="manifest" href="manifest.json">
