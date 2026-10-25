@@ -2,10 +2,10 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <script>/*FARHOUM-BRIDGE v1 : actif seulement avec ?bridge=1, n'ajoute rien au fonctionnement normal*/
+    <script>/*FARHOUM-BRIDGE v2 (rayon min 2 km : toutes les mosquees) : actif seulement avec ?bridge=1, n'ajoute rien au fonctionnement normal*/
 (function(){
   if(location.search.indexOf('bridge=1')<0) return;
-  var APP="salati", QS="amenity=place_of_worship", DEF="\u0645\u0633\u062c\u062f", RADII=[1, 3, 5, 10, 15, 25], BAD=["\u0643\u0646\u064a\u0633\u0629","\u0643\u0627\u062a\u062f\u0631\u0627\u0626\u064a\u0629","\u0643\u0646\u064a\u0633","\u0645\u0639\u0628\u062f","\u062f\u064a\u0631","church","cathedral","chapel","synagogue","temple","monastery","\u00e9glise","eglise","cath\u00e9drale","chapelle","monast\u00e8re","basilique"];
+  var APP="salati", QS="amenity=place_of_worship", DEF="\u0645\u0633\u062c\u062f", RADII=[2, 5, 10, 15, 25], BAD=["\u0643\u0646\u064a\u0633\u0629","\u0643\u0627\u062a\u062f\u0631\u0627\u0626\u064a\u0629","\u0643\u0646\u064a\u0633","\u0645\u0639\u0628\u062f","\u062f\u064a\u0631","church","cathedral","chapel","synagogue","temple","monastery","\u00e9glise","eglise","cath\u00e9drale","chapelle","monast\u00e8re","basilique"];
   function d2r(x){return x*Math.PI/180;}
   function hav(a,b,c,e){var R=6371,dl=d2r(c-a),dn=d2r(e-b),x=Math.sin(dl/2)*Math.sin(dl/2)+Math.cos(d2r(a))*Math.cos(d2r(c))*Math.sin(dn/2)*Math.sin(dn/2);return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));}
   function vb(lat,lon,r){var lD=r/111.32,oD=r/(111.32*Math.max(Math.cos(d2r(lat)),0.1));return (lon-oD).toFixed(5)+','+(lat-lD).toFixed(5)+','+(lon+oD).toFixed(5)+','+(lat+lD).toFixed(5);}
