@@ -57,15 +57,23 @@
         if(!res.ok) return null;
         places=await res.json();
       }catch(e){ return null; }finally{ clearTimeout(t); }
-      var best=null;
+      var best=null, all=[];
       (places||[]).forEach(function(p){
         var la=parseFloat(p.lat), lo=parseFloat(p.lon); if(isNaN(la)||isNaN(lo)) return;
         var nm=p.name||(p.display_name&&p.display_name.split(',')[0].trim())||DEF, low=nm.toLowerCase();
         for(var k=0;k<BAD.length;k++){ if(low.indexOf(BAD[k])>=0) return; }
         var dk=hav(lat,lng,la,lo); if(dk>r) return;
-        if(!best||dk<best.dk) best={name:nm,lat:la,lng:lo,dk:dk};
+        var it={name:nm,lat:la,lng:lo,dk:dk};
+        if(!all.some(function(x){ return x.lat===la&&x.lng===lo; })) all.push(it);
+        if(!best||dk<best.dk) best=it;
       });
-      if(best){ var mw=null; try{ mw=mwPick(await zoneP,best.lat,best.lng); }catch(e){} return {name:best.name,lat:best.lat,lng:best.lng,dist:best.dk*1000,mawaqit:mw}; }
+      if(best){
+        var zl=[]; try{ zl=await zoneP; }catch(e){}
+        all.sort(function(x,y){ return x.dk-y.dk; });
+        var pl=all.map(function(x){ var m=null; try{ m=mwPick(zl,x.lat,x.lng); }catch(e){} return {name:x.name,lat:x.lat,lng:x.lng,dist:x.dk*1000,mawaqit:m}; });
+        var mw=null; try{ mw=mwPick(zl,best.lat,best.lng); }catch(e){}
+        return {name:best.name,lat:best.lat,lng:best.lng,dist:best.dk*1000,mawaqit:mw,pois:pl};
+      }
     }
     return null;
   }
