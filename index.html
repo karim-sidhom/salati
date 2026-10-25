@@ -9,7 +9,47 @@
   function d2r(x){return x*Math.PI/180;}
   function hav(a,b,c,e){var R=6371,dl=d2r(c-a),dn=d2r(e-b),x=Math.sin(dl/2)*Math.sin(dl/2)+Math.cos(d2r(a))*Math.cos(d2r(c))*Math.sin(dn/2)*Math.sin(dn/2);return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));}
   function vb(lat,lon,r){var lD=r/111.32,oD=r/(111.32*Math.max(Math.cos(d2r(lat)),0.1));return (lon-oD).toFixed(5)+','+(lat-lD).toFixed(5)+','+(lon+oD).toFixed(5)+','+(lat+lD).toFixed(5);}
+  /* MAWAQIT dans le pont : adhan + iqama + jumua de la mosquée trouvée, renvoyés dans poi.mawaqit */
+  var MWW='https://mawaqit-proxy.lordsidhom78.workers.dev', MWZ={};
+  function mwTM(t){ if(!t||typeof t!=='string'||t.indexOf(':')<0) return null; var p=t.split(':').map(Number); if(isNaN(p[0])||isNaN(p[1])) return null; return p[0]*60+p[1]; }
+  function mwIq(at,raw){
+    if(raw===undefined||raw===null||raw==='') return at||null;
+    var v=String(raw).trim(); if(v.indexOf(':')>=0) return v;
+    var off=parseInt(v.replace('+',''),10), am=mwTM(at); if(isNaN(off)||am===null) return at||null;
+    var t=(am+off+1440)%1440; return ('0'+Math.floor(t/60)).slice(-2)+':'+('0'+(t%60)).slice(-2);
+  }
+  async function mwGet(u,ms){ var r=await fetch(u,{signal:AbortSignal.timeout(ms)}); if(!r.ok) throw new Error('s'+r.status); return r.json(); }
+  function mwZone(lat,lng){
+    var k=lat.toFixed(3)+','+lng.toFixed(3);
+    if(MWZ[k]) return MWZ[k];
+    var ck='mawaqit_zone_'+k+'_'+new Date().toISOString().slice(0,10);
+    try{ var raw=localStorage.getItem(ck); if(raw){ var l0=JSON.parse(raw); if(Array.isArray(l0)&&l0.length) return MWZ[k]=Promise.resolve(l0); } }catch(e){}
+    var url='https://mawaqit.net/api/2.0/mosque/search?lat='+lat+'&lon='+lng+'&word=&locale=fr&limit=50';
+    var px=[function(u){return 'https://api.allorigins.win/raw?url='+encodeURIComponent(u);},function(u){return 'https://api.codetabs.com/v1/proxy/?quest='+encodeURIComponent(u);},function(u){return 'https://corsproxy.io/?url='+encodeURIComponent(u);}];
+    var p=mwGet(MWW+'/mosques?lat='+lat+'&lon='+lng,8000)
+      .catch(function(){ return mwGet(MWW+'/?url='+encodeURIComponent(url),12000); })
+      .catch(function(){ return Promise.any(px.map(function(b){ return mwGet(b(url),12000); })); })
+      .then(function(d){
+        var l=Array.isArray(d)?d:((d&&d.mosques)||[]);
+        if(l.length){ try{ localStorage.setItem(ck,JSON.stringify(l)); }catch(e){} } else delete MWZ[k];
+        return l;
+      })
+      .catch(function(){ delete MWZ[k]; return []; });
+    return MWZ[k]=p;
+  }
+  function mwPick(list,la,lo){
+    var best=null,bd=Infinity;
+    (list||[]).forEach(function(m){ var a=parseFloat(m.latitude),b=parseFloat(m.longitude); if(isNaN(a)||isNaN(b)) return; var d=hav(la,lo,a,b)*1000; if(d<bd){ bd=d; best=m; } });
+    if(!best||bd>500) return null;
+    var t=best.times||[]; if(t.length<5) return null;
+    var adhan=t.length>=6?[t[0],t[2],t[3],t[4],t[5]]:t.slice(0,5);
+    var iq=best.iqama||[], iqama=adhan.map(function(x,i){ return mwIq(x,iq[i]); });
+    var jumua=[best.jumua,best.jumua2,best.jumua3].filter(function(j){ return typeof j==='string'&&j.indexOf(':')>=0; });
+    if(!jumua.length&&best.jumuaAsDuhr&&adhan[1]) jumua.push(adhan[1]);
+    return {adhan:adhan,iqama:iqama,jumua:jumua,name:best.name||best.label||'',slug:best.slug||''};
+  }
   async function search(lat,lng){
+    var zoneP=mwZone(lat,lng);
     for(var i=0;i<RADII.length;i++){
       var r=RADII[i], ctrl=new AbortController(), t=setTimeout(function(){ctrl.abort();},12000), places;
       try{
@@ -25,7 +65,7 @@
         var dk=hav(lat,lng,la,lo); if(dk>r) return;
         if(!best||dk<best.dk) best={name:nm,lat:la,lng:lo,dk:dk};
       });
-      if(best) return {name:best.name,lat:best.lat,lng:best.lng,dist:best.dk*1000};
+      if(best){ var mw=null; try{ mw=mwPick(await zoneP,best.lat,best.lng); }catch(e){} return {name:best.name,lat:best.lat,lng:best.lng,dist:best.dk*1000,mawaqit:mw}; }
     }
     return null;
   }
