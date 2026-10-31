@@ -50,13 +50,6 @@
     }catch(e){ return null; }
   }
   function mwTM(t){ if(!t||typeof t!=='string'||t.indexOf(':')<0) return null; var p=t.split(':').map(Number); if(isNaN(p[0])||isNaN(p[1])) return null; return p[0]*60+p[1]; }
-  function mwIq(at,raw,ra){
-    if(raw===undefined||raw===null||raw==='') return at||null;
-    var v=String(raw).trim();
-    if(v.indexOf(':')>=0){ var qm=mwTM(v), rm=mwTM(ra), am0=mwTM(at); if(qm===null||rm===null||am0===null) return v; var gp=(((qm-rm+720)%1440)+1440)%1440-720, tt=(am0+gp+1440)%1440; return ('0'+Math.floor(tt/60)).slice(-2)+':'+('0'+(tt%60)).slice(-2); }
-    var off=parseInt(v.replace('+',''),10), am=mwTM(at); if(isNaN(off)||am===null) return at||null;
-    var t=(am+off+1440)%1440; return ('0'+Math.floor(t/60)).slice(-2)+':'+('0'+(t%60)).slice(-2);
-  }
   async function mwGet(u,ms){ var r=await fetch(u,{signal:AbortSignal.timeout(ms)}); if(!r.ok) throw new Error('s'+r.status); return r.json(); }
   function mwZone(lat,lng){
     var k=lat.toFixed(3)+','+lng.toFixed(3);
@@ -81,10 +74,8 @@
     (list||[]).forEach(function(m){ var a=parseFloat(m.latitude),b=parseFloat(m.longitude); if(isNaN(a)||isNaN(b)) return; var d=hav(la,lo,a,b)*1000; if(d<bd){ bd=d; best=m; } });
     if(!best||bd>500) return null;
     var t=best.times||[]; if(t.length<5) return null;
-    var adhan=mwLocalAdhan(la,lo)||(t.length>=6?[t[0],t[2],t[3],t[4],t[5]]:t.slice(0,5));
-    var radhan=t.length>=6?[t[0],t[2],t[3],t[4],t[5]]:t.slice(0,5);
-    var iq=best.iqama||[], iqama=adhan.map(function(x,i){ return mwIq(x,iq[i],radhan[i]); });
-    var mt=mwToday(best,la,lo); if(mt){ adhan=mt.adhan; iqama=mt.iqama; }
+    var mt=mwToday(best,la,lo); if(!mt) return null;
+    var adhan=mt.adhan, iqama=mt.iqama;
     var jumua=[best.jumua,best.jumua2,best.jumua3].filter(function(j){ return typeof j==='string'&&j.indexOf(':')>=0; });
     if(!jumua.length&&best.jumuaAsDuhr&&adhan[1]) jumua.push(adhan[1]);
     return {adhan:adhan,iqama:iqama,jumua:jumua,name:best.name||best.label||'',slug:best.slug||''};
@@ -2267,10 +2258,8 @@ async function attachMawaqitTimesFromZone(container, mosque, zonePromise) {
     console.log(`[mawaqit] correspondance trouvee: "${mosque.name}" <-> "${best.name || best.label}" (${match.distM.toFixed(1)} m)`);
     const mt = mosqueTimesToday(best, parseFloat(best.latitude), parseFloat(best.longitude));
     renderMawaqitTimes(mawaqitBlock, {
-        iqamaToday: mt ? mt.iqama : null,
-        times: mt ? mt.adhan : (localAdhanTimes(parseFloat(best.latitude), parseFloat(best.longitude)) || best.times || []),
-        recTimes: best.times || [],
-        iqama: best.iqama || [],
+        iqamaToday: mt ? mt.iqama : [],
+        times: mt ? mt.adhan : [],
         jumua: best.jumua || null,
         jumua2: best.jumua2 || null,
         jumua3: best.jumua3 || null,
@@ -2309,10 +2298,7 @@ function renderMawaqitTimes(container, data) {
     // iqama is an array of 5 values aligned with [Fajr, Dhuhr, Asr, Maghrib, Isha].
     // Each value is either a minute offset from the adhan time (e.g. "+10", "+5")
     // or, if the mosque configured a fixed clock time, an absolute "HH:MM" string.
-    const iqamaRaw = data.iqama || [];
-    const recRaw = data.recTimes || [];
-    const recAdhan = recRaw.length >= 6 ? [recRaw[0], recRaw[2], recRaw[3], recRaw[4], recRaw[5]] : recRaw.slice(0, 5);
-    const iqamaTimes = data.iqamaToday || adhanTimes.map((adhanT, i) => resolveIqamaTime(adhanT, iqamaRaw[i], recAdhan[i]));
+    const iqamaTimes = data.iqamaToday || [];
 
     // Determine current prayer based on iqama time (the moment the prayer actually happens)
     const now = new Date();
@@ -2419,38 +2405,6 @@ function mosqueTimesToday(best, lat, lng) {
         }
         return { adhan, iqama };
     } catch (e) { return null; }
-}
-
-// Given an adhan time 'HH:MM' and mawaqit's raw iqama value, return the actual
-// iqama clock time as 'HH:MM'. The raw value can be:
-//  - a minute offset like "+10", "10", "+5" → added to the adhan time
-//  - an absolute time like "13:45" → used as-is (mosque set a fixed iqama clock)
-//  - missing/unrecognized → falls back to the adhan time itself
-function resolveIqamaTime(adhanT, rawIqama, recAdhanT) {
-    const adhanMins = timeToMinutes(adhanT);
-    if (rawIqama === undefined || rawIqama === null || rawIqama === '') {
-        return adhanT || null;
-    }
-    const val = String(rawIqama).trim();
-    if (val.includes(':')) {
-        // Heure en clair : on en déduit le RETARD de la mosquée (iqama - adhan du même enregistrement)
-        // puis on l'applique à l'adhan d'aujourd'hui.
-        const qM = timeToMinutes(val), rM = timeToMinutes(recAdhanT);
-        if (qM !== null && rM !== null && adhanMins !== null) {
-            const gap = (((qM - rM + 720) % 1440) + 1440) % 1440 - 720;
-            const tot = (adhanMins + gap + 1440) % 1440;
-            return String(Math.floor(tot / 60)).padStart(2, '0') + ':' + String(tot % 60).padStart(2, '0');
-        }
-        return val;
-    }
-    const offset = parseInt(val.replace('+', ''), 10);
-    if (Number.isNaN(offset) || adhanMins === null) {
-        return adhanT || null;
-    }
-    let total = (adhanMins + offset + 1440) % 1440;
-    const h = Math.floor(total / 60).toString().padStart(2, '0');
-    const m = (total % 60).toString().padStart(2, '0');
-    return `${h}:${m}`;
 }
 
 // ─── القرآن الكريم كاملاً (٦٢٣٦ آية، بدون تشكيل) — لمطابقة الآيات المتلوة أثناء الصلاة ──
@@ -2866,15 +2820,7 @@ async function getIqamaTimesForCurrentLocation() {
         if (bestDist > RAKAT_MOSQUE_PROXIMITY_KM) return null; // بعيد عن المسجد — لا تفعيل لوضع الصلاة
         rakatState.mosqueName = best.name || best.label || '';
         const mt = mosqueTimesToday(best, parseFloat(best.latitude), parseFloat(best.longitude));
-        if (mt) return { adhanTimes: mt.adhan, iqamaTimes: mt.iqama };
-        const rawTimes = best.times || [];
-        const adhanTimes = localAdhanTimes(parseFloat(best.latitude), parseFloat(best.longitude)) || (rawTimes.length >= 6
-            ? [rawTimes[0], rawTimes[2], rawTimes[3], rawTimes[4], rawTimes[5]]
-            : rawTimes.slice(0, 5));
-        const iqamaRaw = best.iqama || [];
-        const recAdhan = rawTimes.length >= 6 ? [rawTimes[0], rawTimes[2], rawTimes[3], rawTimes[4], rawTimes[5]] : rawTimes.slice(0, 5);
-        const iqamaTimes = adhanTimes.map((a, i) => resolveIqamaTime(a, iqamaRaw[i], recAdhan[i]));
-        return { adhanTimes, iqamaTimes };
+        return mt ? { adhanTimes: mt.adhan, iqamaTimes: mt.iqama } : null;
     } catch (e) { return null; }
 }
 
