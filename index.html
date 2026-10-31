@@ -46,6 +46,8 @@
         else if(v.indexOf(':')>=0){ var q=mwTM(v); iqama.push(q===null?v:fm(tm[i]+nm(q-old[i]))); }
         else { var off=parseInt(v.replace('+',''),10); iqama.push(isNaN(off)?fm(ad):fm(ad+off)); }
       }
+      var q1=mwTM(iqama[1]), q2=mwTM(iqama[2]);
+      if(q1!==null&&q2!==null&&(q2-q1)<20) iqama[1]=fm(q2-30);
       return {adhan:adhan,iqama:iqama};
     }catch(e){ return null; }
   }
@@ -2403,6 +2405,9 @@ function mosqueTimesToday(best, lat, lng) {
             else if (v.includes(':')) { const q = timeToMinutes(v); iqama.push(q === null ? v : fm(tm[i] + nm(q - old[i]))); }
             else { const off = parseInt(v.replace('+', ''), 10); iqama.push(Number.isNaN(off) ? fm(ad) : fm(ad + off)); }
         }
+        // ANOMALIE : iqama Dhuhr et iqama Asr à moins de 20 min l'une de l'autre => impossible, l'iqama du Dhuhr est mise d'office 30 min avant l'iqama de l'Asr
+        const q1 = timeToMinutes(iqama[1]), q2 = timeToMinutes(iqama[2]);
+        if (q1 !== null && q2 !== null && (q2 - q1) < 20) iqama[1] = fm(q2 - 30);
         return { adhan, iqama };
     } catch (e) { return null; }
 }
