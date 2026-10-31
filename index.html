@@ -11,6 +11,23 @@
   function vb(lat,lon,r){var lD=r/111.32,oD=r/(111.32*Math.max(Math.cos(d2r(lat)),0.1));return (lon-oD).toFixed(5)+','+(lat-lD).toFixed(5)+','+(lon+oD).toFixed(5)+','+(lat+lD).toFixed(5);}
   /* MAWAQIT dans le pont : adhan + iqama + jumua de la mosquée trouvée, renvoyés dans poi.mawaqit */
   var MWW='https://mawaqit-proxy.lordsidhom78.workers.dev', MWZ={};
+  /* ADHAN LOCAL : même calcul que l'app (méthode Tunisie/Maghreb) — les iqama de la mosquée (+N ou heure fixe) s'appliquent dessus, plus sur les times périmés du worker */
+  function mwLocalAdhan(lat,lng){
+    try{
+      var r2=function(x){return x*180/Math.PI;}, fa=function(a){return a-360*Math.floor(a/360);}, fh=function(h){return h-24*Math.floor(h/24);};
+      var dt=new Date(), tz=-dt.getTimezoneOffset()/60, y=dt.getFullYear(), m=dt.getMonth()+1, d=dt.getDate();
+      if(m<=2){y--;m+=12;} var A=Math.floor(y/100), B=2-A+Math.floor(A/4);
+      var jd=Math.floor(365.25*(y+4716))+Math.floor(30.6001*(m+1))+d+B-1524.5, D=jd-2451545.0;
+      var g=fa(357.529+0.98560028*D), q=fa(280.459+0.98564736*D), L=fa(q+1.915*Math.sin(d2r(g))+0.020*Math.sin(d2r(2*g))), e=23.439-0.00000036*D;
+      var RA=r2(Math.atan2(Math.cos(d2r(e))*Math.sin(d2r(L)),Math.cos(d2r(L))))/15, dec=r2(Math.asin(Math.sin(d2r(e))*Math.sin(d2r(L)))), EqT=q/15-fh(RA);
+      var Dh=12+tz-lng/15-EqT;
+      var ha=function(al,dir){ var c=(Math.sin(d2r(al))-Math.sin(d2r(lat))*Math.sin(d2r(dec)))/(Math.cos(d2r(lat))*Math.cos(d2r(dec))); if(c>1||c<-1) return null; var h=r2(Math.acos(c))/15; return dir==='rise'?Dh-h:Dh+h; };
+      var asrA=r2(Math.atan(1/(1+Math.tan(d2r(Math.abs(lat-dec))))));
+      var v=[ha(-18,'rise'),Dh,ha(asrA,'set'),ha(-0.8333,'set'),ha(-17,'set')];
+      var out=v.map(function(h){ if(h===null||isNaN(h)) return null; h=fh(h); var hr=Math.floor(h), mn=Math.round((h-hr)*60); if(mn===60){mn=0;hr=(hr+1)%24;} return ('0'+hr).slice(-2)+':'+('0'+mn).slice(-2); });
+      return out.every(function(x){return x;})?out:null;
+    }catch(e){ return null; }
+  }
   function mwTM(t){ if(!t||typeof t!=='string'||t.indexOf(':')<0) return null; var p=t.split(':').map(Number); if(isNaN(p[0])||isNaN(p[1])) return null; return p[0]*60+p[1]; }
   function mwIq(at,raw){
     if(raw===undefined||raw===null||raw==='') return at||null;
@@ -42,7 +59,7 @@
     (list||[]).forEach(function(m){ var a=parseFloat(m.latitude),b=parseFloat(m.longitude); if(isNaN(a)||isNaN(b)) return; var d=hav(la,lo,a,b)*1000; if(d<bd){ bd=d; best=m; } });
     if(!best||bd>500) return null;
     var t=best.times||[]; if(t.length<5) return null;
-    var adhan=t.length>=6?[t[0],t[2],t[3],t[4],t[5]]:t.slice(0,5);
+    var adhan=mwLocalAdhan(la,lo)||(t.length>=6?[t[0],t[2],t[3],t[4],t[5]]:t.slice(0,5));
     var iq=best.iqama||[], iqama=adhan.map(function(x,i){ return mwIq(x,iq[i]); });
     var jumua=[best.jumua,best.jumua2,best.jumua3].filter(function(j){ return typeof j==='string'&&j.indexOf(':')>=0; });
     if(!jumua.length&&best.jumuaAsDuhr&&adhan[1]) jumua.push(adhan[1]);
@@ -2225,7 +2242,7 @@ async function attachMawaqitTimesFromZone(container, mosque, zonePromise) {
     const best = match.best;
     console.log(`[mawaqit] correspondance trouvee: "${mosque.name}" <-> "${best.name || best.label}" (${match.distM.toFixed(1)} m)`);
     renderMawaqitTimes(mawaqitBlock, {
-        times: best.times || [],
+        times: localAdhanTimes(parseFloat(best.latitude), parseFloat(best.longitude)) || best.times || [],
         iqama: best.iqama || [],
         jumua: best.jumua || null,
         jumua2: best.jumua2 || null,
@@ -2323,6 +2340,19 @@ function timeToMinutes(t) {
     const [h, m] = t.split(':').map(Number);
     if (Number.isNaN(h) || Number.isNaN(m)) return null;
     return h * 60 + m;
+}
+
+// ADHAN LOCAL : horaires calculés par l'app (même méthode que l'écran principal).
+// Les iqama des mosquées (écart +N ou heure fixe, venant de la base du Worker)
+// s'appliquent sur ces horaires — plus sur les `times` de la base, qui peuvent être périmés.
+function localAdhanTimes(lat, lng) {
+    try {
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+        const sel = document.getElementById('method-select');
+        const tz = -new Date().getTimezoneOffset() / 60;
+        const a = computePrayers(lat, lng, tz, sel ? sel.value : 'tunisia', new Date()).map(p => p.fmt);
+        return a.every(x => x && x !== '--:--') ? a : null;
+    } catch (e) { return null; }
 }
 
 // Given an adhan time 'HH:MM' and mawaqit's raw iqama value, return the actual
@@ -2763,9 +2793,9 @@ async function getIqamaTimesForCurrentLocation() {
         if (bestDist > RAKAT_MOSQUE_PROXIMITY_KM) return null; // بعيد عن المسجد — لا تفعيل لوضع الصلاة
         rakatState.mosqueName = best.name || best.label || '';
         const rawTimes = best.times || [];
-        const adhanTimes = rawTimes.length >= 6
+        const adhanTimes = localAdhanTimes(parseFloat(best.latitude), parseFloat(best.longitude)) || (rawTimes.length >= 6
             ? [rawTimes[0], rawTimes[2], rawTimes[3], rawTimes[4], rawTimes[5]]
-            : rawTimes.slice(0, 5);
+            : rawTimes.slice(0, 5));
         const iqamaRaw = best.iqama || [];
         const iqamaTimes = adhanTimes.map((a, i) => resolveIqamaTime(a, iqamaRaw[i]));
         return { adhanTimes, iqamaTimes };
